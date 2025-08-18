@@ -1,42 +1,21 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getServerSession } from 'next-auth'
-import { authOptions } from '@/lib/auth'
-import prisma from '@/lib/prisma'
+import { PrismaClient } from '@prisma/client'
+
+const prisma = new PrismaClient()
 
 export async function GET(request: NextRequest) {
   try {
-    const session = await getServerSession(authOptions)
-    
-    if (!session?.user?.email) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
-
-    const user = await prisma.user.findUnique({
-      where: { email: session.user.email },
-      include: { school: true }
-    })
-
-    if (!user?.schoolId) {
-      return NextResponse.json({ error: 'School not found' }, { status: 404 })
-    }
-
     const { searchParams } = new URL(request.url)
     const classId = searchParams.get('classId')
-    const feeTypeId = searchParams.get('feeTypeId')
     const academicYearId = searchParams.get('academicYearId')
 
-    const where: any = {
-      schoolId: user.schoolId
-    }
-
+    // Build where clause
+    const where: any = { isActive: true }
+    
     if (classId) {
       where.classId = classId
     }
-
-    if (feeTypeId) {
-      where.feeTypeId = feeTypeId
-    }
-
+    
     if (academicYearId) {
       where.academicYearId = academicYearId
     }
@@ -45,27 +24,20 @@ export async function GET(request: NextRequest) {
       where,
       include: {
         class: true,
-        feeType: true,
         academicYear: true,
-        terms: {
-          include: {
-            term: true
-          }
-        }
+        feeType: true
       },
       orderBy: [
-        { academicYear: { name: 'desc' } },
-        { class: { name: 'asc' } },
+        { class: { level: 'asc' } },
         { feeType: { name: 'asc' } }
       ]
     })
 
-    return NextResponse.json({ feeStructures })
-
+    return NextResponse.json(feeStructures)
   } catch (error) {
     console.error('Error fetching fee structures:', error)
     return NextResponse.json(
-      { error: 'Internal server error' },
+      { error: 'Failed to fetch fee structures' },
       { status: 500 }
     )
   }
@@ -73,68 +45,48 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    const session = await getServerSession(authOptions)
-    
-    if (!session?.user?.email) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
-
-    const user = await prisma.user.findUnique({
-      where: { email: session.user.email },
-      include: { school: true }
-    })
-
-    if (!user?.schoolId) {
-      return NextResponse.json({ error: 'School not found' }, { status: 404 })
-    }
-
     const body = await request.json()
-    const {
-      classId,
-      feeTypeId,
-      academicYearId,
-      terms
-    } = body
-
+    
     // Validate required fields
-    if (!classId || !feeTypeId || !academicYearId || !terms || !Array.isArray(terms)) {
+    const { 
+      academicYearId, 
+      classId, 
+      feeTypeId, 
+      amount, 
+      term1Amount, 
+      term2Amount, 
+      term3Amount 
+    } = body
+    
+    if (!academicYearId || !classId || !feeTypeId || !amount) {
       return NextResponse.json(
         { error: 'Missing required fields' },
         { status: 400 }
       )
     }
 
-    // Verify class belongs to the school
-    const classRecord = await prisma.class.findFirst({
+    // Check if fee structure already exists for this combination
+    const existingStructure = await prisma.feeStructure.findFirst({
       where: {
-        id: classId,
-        schoolId: user.schoolId
+        academicYearId,
+        classId,
+        feeTypeId
       }
     })
 
-    if (!classRecord) {
+    if (existingStructure) {
       return NextResponse.json(
-        { error: 'Class not found' },
-        { status: 404 }
+        { error: 'Fee structure already exists for this class, academic year, and fee type' },
+        { status: 400 }
       )
     }
 
-    // Verify fee type exists
-    const feeType = await prisma.feeType.findUnique({
-      where: { id: feeTypeId }
-    })
-
-    if (!feeType) {
-      return NextResponse.json(
-        { error: 'Fee type not found' },
-        { status: 404 }
-      )
-    }
-
-    // Verify academic year exists
-    const academicYear = await prisma.academicYear.findUnique({
-      where: { id: academicYearId }
-    })
+    // Validate references
+    const [academicYear, classRecord, feeType] = await Promise.all([
+      prisma.academicYear.findUnique({ where: { id: academicYearId } }),
+      prisma.class.findUnique({ where: { id: classId } }),
+      prisma.feeType.findUnique({ where: { id: feeTypeId } })
+    ])
 
     if (!academicYear) {
       return NextResponse.json(
@@ -143,56 +95,52 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Check if fee structure already exists for this combination
-    const existingStructure = await prisma.feeStructure.findFirst({
-      where: {
-        schoolId: user.schoolId,
-        classId,
-        feeTypeId,
-        academicYearId
-      }
-    })
-
-    if (existingStructure) {
+    if (!classRecord) {
       return NextResponse.json(
-        { error: 'Fee structure already exists for this class, fee type, and academic year' },
-        { status: 409 }
+        { error: 'Class not found' },
+        { status: 404 }
       )
     }
 
-    // Create fee structure with terms
+    if (!feeType) {
+      return NextResponse.json(
+        { error: 'Fee type not found' },
+        { status: 404 }
+      )
+    }
+
+    // Create fee structure
     const feeStructure = await prisma.feeStructure.create({
       data: {
-        schoolId: user.schoolId,
+        academicYearId,
         classId,
         feeTypeId,
-        academicYearId,
-        terms: {
-          create: terms.map((term: any) => ({
-            termId: term.termId,
-            amount: parseFloat(term.amount)
-          }))
-        }
+        amount: parseFloat(amount),
+        term1Amount: parseFloat(term1Amount || 0),
+        term2Amount: parseFloat(term2Amount || 0),
+        term3Amount: parseFloat(term3Amount || 0),
+        isActive: true
       },
       include: {
         class: true,
-        feeType: true,
         academicYear: true,
-        terms: {
-          include: {
-            term: true
-          }
-        }
+        feeType: true
       }
     })
 
     return NextResponse.json(feeStructure, { status: 201 })
-
   } catch (error) {
     console.error('Error creating fee structure:', error)
     return NextResponse.json(
-      { error: 'Internal server error' },
+      { error: 'Failed to create fee structure' },
       { status: 500 }
     )
   }
 }
+
+
+
+
+
+
+

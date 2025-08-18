@@ -138,3 +138,10 @@ export default function FeeTypeModal({ isOpen, onClose, onSave, feeType, mode }:
   )
 }
 
+
+
+
+
+
+
+

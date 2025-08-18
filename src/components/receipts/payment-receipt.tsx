@@ -179,3 +179,10 @@ export default function PaymentReceipt({ payment, schoolInfo }: PaymentReceiptPr
   )
 }
 
+
+
+
+
+
+
+

@@ -3,35 +3,61 @@
 import { useState, useEffect } from "react"
 import DashboardLayout from "@/components/layout/dashboard-layout"
 import { useStudents } from "@/hooks/useApi"
+import AddStudentModal from "@/components/modals/add-student-modal"
+import BulkImportModal from "@/components/modals/bulk-import-modal"
 
 interface Student {
   id: string
+  admissionNumber: string
   firstName: string
   lastName: string
-  email: string
-  phone: string
-  parentName: string
-  parentPhone: string
-  status: 'active' | 'inactive'
-  class: {
+  middleName?: string
+  dateOfBirth?: string
+  gender?: string
+  parentName?: string
+  parentPhone?: string
+  parentEmail?: string
+  address?: string
+  status: 'ACTIVE' | 'GRADUATED' | 'TRANSFERRED' | 'SUSPENDED'
+  class?: {
     id: string
     name: string
   }
+  school?: {
+    id: string
+    name: string
+  }
+  branch?: {
+    id: string
+    name: string
+  }
+  academicYear?: {
+    id: string
+    year: string
+  }
   feeBalances: Array<{
-    amountPaid: number
+    id: string
+    amountCharged: string
+    amountPaid: string
+    balance: string
     feeType: {
+      id: string
       name: string
     }
   }>
   feePayments: Array<{
-    amount: number
+    id: string
+    amountPaid: string
     paymentDate: string
+    receiptNumber: string
   }>
 }
 
 export default function StudentsPage() {
   const [searchTerm, setSearchTerm] = useState("")
   const [statusFilter, setStatusFilter] = useState("all")
+  const [showAddModal, setShowAddModal] = useState(false)
+  const [showBulkImportModal, setShowBulkImportModal] = useState(false)
   const { data, loading, error, getStudents } = useStudents()
 
   useEffect(() => {
@@ -39,22 +65,22 @@ export default function StudentsPage() {
       search: searchTerm,
       status: statusFilter === "all" ? undefined : statusFilter
     })
-  }, [searchTerm, statusFilter, getStudents])
+  }, [searchTerm, statusFilter])
 
   const students = data?.students || []
   const pagination = data?.pagination
 
   const filteredStudents = students
 
-  const activeStudents = students.filter((s: Student) => s.status === 'active').length
+  const activeStudents = students.filter((s: Student) => s.status === 'ACTIVE').length
   const totalBalance = students.reduce((sum: number, student: Student) => {
-    const totalPaid = student.feePayments.reduce((sum: number, payment: any) => sum + payment.amount, 0)
-    const totalCharged = student.feeBalances.reduce((sum: number, balance: any) => sum + balance.amountPaid, 0)
+    const totalPaid = student.feePayments.reduce((sum: number, payment: any) => sum + parseFloat(payment.amountPaid), 0)
+    const totalCharged = student.feeBalances.reduce((sum: number, balance: any) => sum + parseFloat(balance.amountCharged), 0)
     return sum + (totalCharged - totalPaid)
   }, 0)
   const overdueStudents = students.filter((student: Student) => {
-    const totalPaid = student.feePayments.reduce((sum: number, payment: any) => sum + payment.amount, 0)
-    const totalCharged = student.feeBalances.reduce((sum: number, balance: any) => sum + balance.amountPaid, 0)
+    const totalPaid = student.feePayments.reduce((sum: number, payment: any) => sum + parseFloat(payment.amountPaid), 0)
+    const totalCharged = student.feeBalances.reduce((sum: number, balance: any) => sum + parseFloat(balance.amountCharged), 0)
     return (totalCharged - totalPaid) > 0
   }).length
 
@@ -79,12 +105,26 @@ export default function StudentsPage() {
                 Manage student records, fees, and academic information
               </p>
             </div>
-            <button className="bg-gradient-to-r from-blue-600 to-blue-700 text-white px-6 py-3 rounded-xl hover:from-blue-700 hover:to-blue-800 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-all duration-300 transform hover:scale-105 shadow-lg">
-              <span className="flex items-center">
-                <span className="mr-2">+</span>
-                Add New Student
-              </span>
-            </button>
+            <div className="flex space-x-3">
+              <button 
+                onClick={() => setShowBulkImportModal(true)}
+                className="bg-gradient-to-r from-green-600 to-green-700 text-white px-6 py-3 rounded-xl hover:from-green-700 hover:to-green-800 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 transition-all duration-300 transform hover:scale-105 shadow-lg"
+              >
+                <span className="flex items-center">
+                  <span className="mr-2">📁</span>
+                  Bulk Import
+                </span>
+              </button>
+              <button 
+                onClick={() => setShowAddModal(true)}
+                className="bg-gradient-to-r from-blue-600 to-blue-700 text-white px-6 py-3 rounded-xl hover:from-blue-700 hover:to-blue-800 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-all duration-300 transform hover:scale-105 shadow-lg"
+              >
+                <span className="flex items-center">
+                  <span className="mr-2">+</span>
+                  Add New Student
+                </span>
+              </button>
+            </div>
           </div>
         </div>
 
@@ -176,10 +216,45 @@ export default function StudentsPage() {
 
         {/* Loading State */}
         {loading && (
-          <div className="bg-white rounded-2xl shadow-lg border border-gray-100 p-8">
-            <div className="flex items-center justify-center">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-              <span className="ml-3 text-gray-600">Loading students...</span>
+          <div className="animate-fade-in">
+            <div className="mb-8">
+              <div className="h-8 bg-gray-200 rounded w-1/3 mb-4 animate-pulse"></div>
+              <div className="h-4 bg-gray-200 rounded w-1/2 animate-pulse"></div>
+            </div>
+            
+            {/* Loading skeleton for stats */}
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+              {Array.from({ length: 4 }).map((_, index) => (
+                <div key={index} className="bg-white rounded-2xl shadow-lg border border-gray-100 p-6 animate-pulse">
+                  <div className="flex items-center justify-between">
+                    <div className="flex-1">
+                      <div className="h-4 bg-gray-200 rounded mb-2"></div>
+                      <div className="h-8 bg-gray-200 rounded mb-1"></div>
+                      <div className="h-3 bg-gray-200 rounded w-2/3"></div>
+                    </div>
+                    <div className="w-12 h-12 bg-gray-200 rounded-xl"></div>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Loading skeleton for table */}
+            <div className="bg-white rounded-2xl shadow-lg border border-gray-100 p-6">
+              <div className="h-6 bg-gray-200 rounded w-1/4 mb-6 animate-pulse"></div>
+              <div className="space-y-4">
+                {Array.from({ length: 5 }).map((_, index) => (
+                  <div key={index} className="flex items-center space-x-4 p-4 border rounded-lg animate-pulse">
+                    <div className="w-12 h-12 bg-gray-200 rounded-full"></div>
+                    <div className="flex-1 space-y-2">
+                      <div className="h-4 bg-gray-200 rounded w-1/3"></div>
+                      <div className="h-3 bg-gray-200 rounded w-1/4"></div>
+                    </div>
+                    <div className="h-4 bg-gray-200 rounded w-20"></div>
+                    <div className="h-4 bg-gray-200 rounded w-24"></div>
+                    <div className="h-4 bg-gray-200 rounded w-16"></div>
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
         )}
@@ -240,7 +315,7 @@ export default function StudentsPage() {
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
                 {filteredStudents.map((student: Student) => (
-                  <tr key={student.id} className="hover:bg-gray-50 transition-colors duration-200">
+                  <tr key={student.id} className="hover:bg-gradient-to-r hover:from-blue-50 hover:to-indigo-50 transition-all duration-200 hover:shadow-sm">
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="flex items-center">
                         <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-blue-600 rounded-full flex items-center justify-center mr-4">
@@ -250,7 +325,7 @@ export default function StudentsPage() {
                         </div>
                         <div>
                           <div className="text-sm font-semibold text-gray-900">{student.firstName} {student.lastName}</div>
-                          <div className="text-sm text-gray-500">{student.email}</div>
+                          <div className="text-sm text-gray-500">{student.admissionNumber}</div>
                         </div>
                       </div>
                     </td>
@@ -267,17 +342,17 @@ export default function StudentsPage() {
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <span className={`inline-flex px-3 py-1 text-sm font-medium rounded-full ${
-                        student.status === 'active' 
+                        student.status === 'ACTIVE' 
                           ? 'bg-green-100 text-green-800' 
                           : 'bg-red-100 text-red-800'
                       }`}>
-                        {student.status.charAt(0).toUpperCase() + student.status.slice(1)}
+                        {student.status.charAt(0).toUpperCase() + student.status.slice(1).toLowerCase()}
                       </span>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       {(() => {
-                        const totalPaid = student.feePayments.reduce((sum: number, payment: any) => sum + payment.amount, 0)
-                        const totalCharged = student.feeBalances.reduce((sum: number, balance: any) => sum + balance.amountPaid, 0)
+                        const totalPaid = student.feePayments.reduce((sum: number, payment: any) => sum + parseFloat(payment.amountPaid), 0)
+                        const totalCharged = student.feeBalances.reduce((sum: number, balance: any) => sum + parseFloat(balance.amountCharged), 0)
                         const balance = totalCharged - totalPaid
                         return (
                           <div className={`text-sm font-semibold ${
@@ -296,13 +371,13 @@ export default function StudentsPage() {
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                       <div className="flex space-x-2">
-                        <button className="text-blue-600 hover:text-blue-900 transition-colors duration-200">
+                        <button className="text-blue-600 hover:text-blue-900 transition-all duration-200 hover:scale-110 transform">
                           View
                         </button>
-                        <button className="text-green-600 hover:text-green-900 transition-colors duration-200">
+                        <button className="text-green-600 hover:text-green-900 transition-all duration-200 hover:scale-110 transform">
                           Edit
                         </button>
-                        <button className="text-red-600 hover:text-red-900 transition-colors duration-200">
+                        <button className="text-red-600 hover:text-red-900 transition-all duration-200 hover:scale-110 transform">
                           Delete
                         </button>
                       </div>
@@ -314,8 +389,8 @@ export default function StudentsPage() {
           </div>
 
           {filteredStudents.length === 0 && (
-            <div className="text-center py-12">
-              <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+            <div className="text-center py-12 animate-fade-in">
+              <div className="w-16 h-16 bg-gradient-to-br from-gray-100 to-gray-200 rounded-full flex items-center justify-center mx-auto mb-4 shadow-lg">
                 <span className="text-gray-400 text-2xl">👥</span>
               </div>
               <h3 className="text-lg font-medium text-gray-900 mb-2">No students found</h3>
@@ -323,6 +398,30 @@ export default function StudentsPage() {
             </div>
           )}
         </div>
+        )}
+
+        {/* Modals */}
+        <AddStudentModal
+          isOpen={showAddModal}
+          onClose={() => setShowAddModal(false)}
+          onSubmit={async (data) => {
+            console.log('Adding student:', data)
+            // TODO: Implement API call to add student
+            await new Promise(resolve => setTimeout(resolve, 1000)) // Simulate API call
+            getStudents() // Refresh the list
+          }}
+        />
+
+        <BulkImportModal
+          isOpen={showBulkImportModal}
+          onClose={() => setShowBulkImportModal(false)}
+          onImport={async (data) => {
+            console.log('Importing students:', data)
+            // TODO: Implement API call to bulk import students
+            await new Promise(resolve => setTimeout(resolve, 2000)) // Simulate API call
+            getStudents() // Refresh the list
+          }}
+        />
       </div>
     </DashboardLayout>
   )

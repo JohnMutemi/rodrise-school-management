@@ -1,34 +1,58 @@
 "use client"
 
 import { useSession } from "next-auth/react"
+import { useState, useEffect } from "react"
 import DashboardLayout from "@/components/layout/dashboard-layout"
 import Link from "next/link"
+import { useStudents } from "@/hooks/useApi"
 
 export default function DashboardPage() {
   const { data: session } = useSession()
+  const { data: studentsData, loading: studentsLoading } = useStudents()
+
+  // Calculate dashboard statistics
+  const students = studentsData?.students || []
+  
+  const totalFeesCharged = students.reduce((sum: number, student: any) => {
+    return sum + student.feeBalances.reduce((balanceSum: number, balance: any) => {
+      return balanceSum + parseFloat(balance.amountCharged || 0)
+    }, 0)
+  }, 0)
+
+  const totalPayments = students.reduce((sum: number, student: any) => {
+    return sum + student.feePayments.reduce((paymentSum: number, payment: any) => {
+      return paymentSum + parseFloat(payment.amountPaid || 0)
+    }, 0)
+  }, 0)
+
+  const outstandingBalance = totalFeesCharged - totalPayments
+
+  const formatCurrency = (amount: number) => {
+    return new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency: 'USD',
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 0
+    }).format(amount)
+  }
 
   return (
     <DashboardLayout>
       <div className="p-6 bg-gradient-to-br from-gray-50 to-blue-50 min-h-screen">
-        {/* Header with enhanced styling */}
-        <div className="mb-8">
+
+
+        {/* Enhanced Welcome Message */}
+        <div className="mb-8 bg-gradient-to-r from-indigo-500 to-purple-600 rounded-2xl p-8 text-white shadow-xl animate-fade-in">
           <div className="flex items-center justify-between">
             <div>
-              <h1 className="text-3xl font-bold bg-gradient-to-r from-gray-900 to-blue-600 bg-clip-text text-transparent">
-                Dashboard
-              </h1>
-              <p className="text-gray-600 mt-2 text-lg">
-                Welcome back, {session?.user?.name || 'Admin'}! Here's what's happening today.
+              <h2 className="text-2xl font-bold mb-2">Welcome to Rodrise School Management</h2>
+              <p className="text-indigo-100">
+                Get started by exploring the modules below or use the quick actions below.
               </p>
             </div>
-            <div className="flex items-center space-x-3">
-              <div className="text-sm text-gray-500">
-                {new Date().toLocaleDateString('en-US', { 
-                  weekday: 'long', 
-                  year: 'numeric', 
-                  month: 'long', 
-                  day: 'numeric' 
-                })}
+            <div className="hidden md:block">
+              <div className="w-16 h-16 bg-white bg-opacity-20 rounded-full flex items-center justify-center">
+                <span className="text-2xl">🎓</span>
               </div>
             </div>
           </div>
@@ -36,12 +60,28 @@ export default function DashboardPage() {
 
         {/* Enhanced Statistics Cards */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-          <div className="bg-white rounded-2xl shadow-lg border border-gray-100 p-6 hover:shadow-xl transition-all duration-300 transform hover:-translate-y-1">
+          {studentsLoading ? (
+            // Loading skeleton
+            Array.from({ length: 4 }).map((_, index) => (
+              <div key={index} className="bg-white rounded-2xl shadow-lg border border-gray-100 p-6 animate-pulse">
+                <div className="flex items-center justify-between">
+                  <div className="flex-1">
+                    <div className="h-4 bg-gray-200 rounded mb-2"></div>
+                    <div className="h-8 bg-gray-200 rounded mb-1"></div>
+                    <div className="h-3 bg-gray-200 rounded w-2/3"></div>
+                  </div>
+                  <div className="w-12 h-12 bg-gray-200 rounded-xl"></div>
+                </div>
+              </div>
+            ))
+                    ) : (
+            <>
+              <div className="bg-white rounded-2xl shadow-lg border border-gray-100 p-6 hover:shadow-xl transition-all duration-300 transform hover:-translate-y-1">
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium text-gray-600 mb-2">Total Students</p>
-                <p className="text-3xl font-bold text-gray-900">0</p>
-                <p className="text-xs text-green-600 mt-1">↗ +0% from last month</p>
+                <p className="text-3xl font-bold text-gray-900">{studentsData?.students?.length || 0}</p>
+                <p className="text-xs text-green-600 mt-1">↗ Active students</p>
               </div>
               <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-blue-600 rounded-xl flex items-center justify-center">
                 <span className="text-white text-xl">👥</span>
@@ -52,9 +92,9 @@ export default function DashboardPage() {
           <div className="bg-white rounded-2xl shadow-lg border border-gray-100 p-6 hover:shadow-xl transition-all duration-300 transform hover:-translate-y-1">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-gray-600 mb-2">Total Fees</p>
-                <p className="text-3xl font-bold text-gray-900">$0</p>
-                <p className="text-xs text-green-600 mt-1">↗ +0% from last month</p>
+                <p className="text-sm font-medium text-gray-600 mb-2">Total Fees Charged</p>
+                <p className="text-3xl font-bold text-gray-900">${formatCurrency(totalFeesCharged)}</p>
+                <p className="text-xs text-green-600 mt-1">↗ Total charged</p>
               </div>
               <div className="w-12 h-12 bg-gradient-to-br from-green-500 to-green-600 rounded-xl flex items-center justify-center">
                 <span className="text-white text-xl">💰</span>
@@ -65,9 +105,9 @@ export default function DashboardPage() {
           <div className="bg-white rounded-2xl shadow-lg border border-gray-100 p-6 hover:shadow-xl transition-all duration-300 transform hover:-translate-y-1">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-gray-600 mb-2">Payments</p>
-                <p className="text-3xl font-bold text-gray-900">0</p>
-                <p className="text-xs text-blue-600 mt-1">↗ +0% from last month</p>
+                <p className="text-sm font-medium text-gray-600 mb-2">Total Payments</p>
+                <p className="text-3xl font-bold text-gray-900">${formatCurrency(totalPayments)}</p>
+                <p className="text-xs text-blue-600 mt-1">↗ Collected</p>
               </div>
               <div className="w-12 h-12 bg-gradient-to-br from-purple-500 to-purple-600 rounded-xl flex items-center justify-center">
                 <span className="text-white text-xl">💳</span>
@@ -78,15 +118,17 @@ export default function DashboardPage() {
           <div className="bg-white rounded-2xl shadow-lg border border-gray-100 p-6 hover:shadow-xl transition-all duration-300 transform hover:-translate-y-1">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-gray-600 mb-2">Balances</p>
-                <p className="text-3xl font-bold text-gray-900">$0</p>
-                <p className="text-xs text-orange-600 mt-1">↗ +0% from last month</p>
+                <p className="text-sm font-medium text-gray-600 mb-2">Outstanding</p>
+                <p className="text-3xl font-bold text-gray-900">${formatCurrency(outstandingBalance)}</p>
+                <p className="text-xs text-orange-600 mt-1">↗ Pending</p>
               </div>
               <div className="w-12 h-12 bg-gradient-to-br from-orange-500 to-orange-600 rounded-xl flex items-center justify-center">
                 <span className="text-white text-xl">⚖️</span>
               </div>
             </div>
           </div>
+            </>
+          )}
         </div>
 
         {/* Enhanced Content Grid */}
@@ -194,23 +236,6 @@ export default function DashboardPage() {
                   </div>
                   <span className="text-sm text-yellow-600 font-medium">Never</span>
                 </div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Enhanced Welcome Message */}
-        <div className="mt-8 bg-gradient-to-r from-indigo-500 to-purple-600 rounded-2xl p-8 text-white">
-          <div className="flex items-center justify-between">
-            <div>
-              <h2 className="text-2xl font-bold mb-2">Welcome to Rodrise School Management</h2>
-              <p className="text-indigo-100">
-                Get started by exploring the modules below or use the quick actions above.
-              </p>
-            </div>
-            <div className="hidden md:block">
-              <div className="w-16 h-16 bg-white bg-opacity-20 rounded-full flex items-center justify-center">
-                <span className="text-2xl">🎓</span>
               </div>
             </div>
           </div>

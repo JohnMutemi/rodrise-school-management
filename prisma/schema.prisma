@@ -248,6 +248,7 @@ model FeePayment {
   paymentMethod PaymentMethod? @relation(fields: [paymentMethodId], references: [id])
   
   paymentDetails PaymentDetail[]
+  photoReceipts PhotoReceipt[]
 
   @@map("fee_payments")
 }
@@ -263,6 +264,22 @@ model PaymentDetail {
   feeType FeeType   @relation(fields: [feeTypeId], references: [id])
 
   @@map("payment_details")
+}
+
+model PhotoReceipt {
+  id            String   @id @default(cuid())
+  paymentId     String
+  receiptNumber String
+  photoPath     String
+  notes         String?
+  amount        Decimal  @db.Decimal(10, 2)
+  paymentMethod String
+  captureDate   DateTime
+  uploadedAt    DateTime @default(now())
+
+  payment FeePayment @relation(fields: [paymentId], references: [id])
+
+  @@map("photo_receipts")
 }
 
 model FeeBalance {

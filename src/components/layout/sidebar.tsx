@@ -52,7 +52,7 @@ export default function Sidebar() {
     <div className={`bg-white shadow-lg ${collapsed ? 'w-16' : 'w-64'} transition-all duration-300 min-h-screen`}>
       <div className="flex flex-col h-full">
         {/* Header */}
-        <div className="flex items-center justify-between p-4 border-b">
+        <div className="flex items-center justify-between p-4 border-b bg-gradient-to-r from-indigo-50 to-purple-50">
           {!collapsed && (
             <h1 className="text-lg font-semibold text-gray-900">
               Rodrise School
@@ -75,10 +75,10 @@ export default function Sidebar() {
                 <li key={item.name}>
                   <Link
                     href={item.href}
-                    className={`flex items-center px-3 py-2 rounded-md text-sm font-medium transition-colors ${
+                    className={`flex items-center px-3 py-2 rounded-md text-sm font-medium transition-all duration-200 ${
                       isActive
-                        ? "bg-indigo-100 text-indigo-700"
-                        : "text-gray-600 hover:bg-gray-100 hover:text-gray-900"
+                        ? "bg-gradient-to-r from-indigo-500 to-purple-600 text-white shadow-lg transform scale-105"
+                        : "text-gray-600 hover:bg-gradient-to-r hover:from-indigo-50 hover:to-purple-50 hover:text-indigo-700 hover:shadow-md"
                     }`}
                   >
                     <span className="mr-3">{item.icon}</span>

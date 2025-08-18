@@ -1,103 +1,194 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getServerSession } from 'next-auth'
-import { authOptions } from '@/lib/auth'
-import prisma from '@/lib/prisma'
+import { PrismaClient } from '@prisma/client'
+
+const prisma = new PrismaClient()
 
 export async function GET(request: NextRequest) {
   try {
-    const session = await getServerSession(authOptions)
-    
-    if (!session?.user?.email) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
-
-    const user = await prisma.user.findUnique({
-      where: { email: session.user.email },
-      include: { school: true }
-    })
-
-    if (!user?.schoolId) {
-      return NextResponse.json({ error: 'School not found' }, { status: 404 })
-    }
-
     const { searchParams } = new URL(request.url)
     const studentId = searchParams.get('studentId')
-    const feeTypeId = searchParams.get('feeTypeId')
+    const academicYearId = searchParams.get('academicYearId')
     const termId = searchParams.get('termId')
     const page = parseInt(searchParams.get('page') || '1')
     const limit = parseInt(searchParams.get('limit') || '10')
     const skip = (page - 1) * limit
 
-    const where: any = {
-      student: {
-        schoolId: user.schoolId
-      }
-    }
-
+    // Build where clause
+    const where: any = {}
+    
     if (studentId) {
       where.studentId = studentId
     }
-
-    if (feeTypeId) {
-      where.feeTypeId = feeTypeId
+    
+    if (academicYearId) {
+      where.academicYearId = academicYearId
     }
-
+    
     if (termId) {
       where.termId = termId
     }
 
-    const [balances, total] = await Promise.all([
-      prisma.feeBalance.findMany({
-        where,
-        include: {
-          student: {
-            include: {
-              class: true
-            }
-          },
-          feeType: true,
-          term: true
+    // Get balances with related data
+    const balances = await prisma.feeBalance.findMany({
+      where,
+      include: {
+        student: {
+          include: {
+            class: true
+          }
         },
-        orderBy: [
-          { student: { firstName: 'asc' } },
-          { feeType: { name: 'asc' } }
-        ],
-        skip,
-        take: limit
-      }),
-      prisma.feeBalance.count({ where })
-    ])
+        academicYear: true,
+        term: true,
+        feeType: true
+      },
+      skip,
+      take: limit,
+      orderBy: [
+        { student: { lastName: 'asc' } },
+        { student: { firstName: 'asc' } },
+        { feeType: { name: 'asc' } }
+      ]
+    })
 
-    // Calculate outstanding amounts
-    const balancesWithOutstanding = balances.map(balance => {
-      const feeStructure = balance.feeStructure
-      const totalAmount = feeStructure ? feeStructure.amount : 0
-      const outstandingAmount = totalAmount - balance.amountPaid
-      
-      return {
-        ...balance,
-        totalAmount,
-        outstandingAmount,
-        isFullyPaid: outstandingAmount <= 0,
-        isOverdue: outstandingAmount > 0 && balance.dueDate && new Date() > new Date(balance.dueDate)
-      }
+    // Get total count for pagination
+    const total = await prisma.feeBalance.count({ where })
+
+    // Calculate summary statistics
+    const summary = await prisma.feeBalance.aggregate({
+      where,
+      _sum: {
+        amountCharged: true,
+        amountPaid: true,
+        balance: true
+      },
+      _count: true
     })
 
     return NextResponse.json({
-      balances: balancesWithOutstanding,
+      balances,
       pagination: {
         page,
         limit,
         total,
         pages: Math.ceil(total / limit)
+      },
+      summary: {
+        totalCharged: summary._sum.amountCharged || 0,
+        totalPaid: summary._sum.amountPaid || 0,
+        totalBalance: summary._sum.balance || 0,
+        totalRecords: summary._count
       }
     })
-
   } catch (error) {
-    console.error('Error fetching fee balances:', error)
+    console.error('Error fetching balances:', error)
     return NextResponse.json(
-      { error: 'Internal server error' },
+      { error: 'Failed to fetch balances' },
       { status: 500 }
     )
   }
 }
+
+export async function POST(request: NextRequest) {
+  try {
+    const body = await request.json()
+    
+    // Validate required fields
+    const { 
+      studentId, 
+      academicYearId, 
+      termId, 
+      feeTypeId, 
+      amountCharged 
+    } = body
+    
+    if (!studentId || !academicYearId || !feeTypeId || !amountCharged) {
+      return NextResponse.json(
+        { error: 'Missing required fields' },
+        { status: 400 }
+      )
+    }
+
+    // Check if balance already exists for this combination
+    const existingBalance = await prisma.feeBalance.findFirst({
+      where: {
+        studentId,
+        academicYearId,
+        termId,
+        feeTypeId
+      }
+    })
+
+    if (existingBalance) {
+      return NextResponse.json(
+        { error: 'Fee balance already exists for this student, term, and fee type' },
+        { status: 400 }
+      )
+    }
+
+    // Validate references
+    const [student, academicYear, feeType] = await Promise.all([
+      prisma.student.findUnique({ where: { id: studentId } }),
+      prisma.academicYear.findUnique({ where: { id: academicYearId } }),
+      prisma.feeType.findUnique({ where: { id: feeTypeId } })
+    ])
+
+    if (!student) {
+      return NextResponse.json(
+        { error: 'Student not found' },
+        { status: 404 }
+      )
+    }
+
+    if (!academicYear) {
+      return NextResponse.json(
+        { error: 'Academic year not found' },
+        { status: 404 }
+      )
+    }
+
+    if (!feeType) {
+      return NextResponse.json(
+        { error: 'Fee type not found' },
+        { status: 404 }
+      )
+    }
+
+    // Create fee balance
+    const balance = await prisma.feeBalance.create({
+      data: {
+        studentId,
+        academicYearId,
+        termId,
+        feeTypeId,
+        amountCharged: parseFloat(amountCharged),
+        amountPaid: 0,
+        balance: parseFloat(amountCharged)
+      },
+      include: {
+        student: {
+          include: {
+            class: true
+          }
+        },
+        academicYear: true,
+        term: true,
+        feeType: true
+      }
+    })
+
+    return NextResponse.json(balance, { status: 201 })
+  } catch (error) {
+    console.error('Error creating fee balance:', error)
+    return NextResponse.json(
+      { error: 'Failed to create fee balance' },
+      { status: 500 }
+    )
+  }
+}
+
+
+
+
+
+
+
