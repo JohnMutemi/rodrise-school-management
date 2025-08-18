@@ -1,0 +1,453 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// =====================================================
+// CORE ENTITIES
+// =====================================================
+
+model School {
+  id           String   @id @default(cuid())
+  name         String
+  address      String?
+  phone        String?
+  email        String?
+  website      String?
+  logoUrl      String?
+  academicYear String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  branches Branch[]
+  students Student[]
+
+  @@map("schools")
+}
+
+model Branch {
+  id        String   @id @default(cuid())
+  schoolId  String
+  name      String
+  address   String?
+  phone     String?
+  email     String?
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  school   School     @relation(fields: [schoolId], references: [id])
+  students Student[]
+
+  @@map("branches")
+}
+
+model AcademicYear {
+  id        String   @id @default(cuid())
+  year      String   @unique
+  startDate DateTime
+  endDate   DateTime
+  isCurrent Boolean  @default(false)
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  terms    Term[]
+  students Student[]
+  feeStructures FeeStructure[]
+  annualFeesStructures AnnualFeesStructure[]
+  feePayments FeePayment[]
+  feeBalances FeeBalance[]
+  otherCharges OtherCharge[]
+
+  @@map("academic_years")
+}
+
+model Term {
+  id             String       @id @default(cuid())
+  academicYearId String
+  name           String
+  startDate      DateTime
+  endDate        DateTime
+  isCurrent      Boolean      @default(false)
+  createdAt      DateTime     @default(now())
+
+  academicYear AcademicYear @relation(fields: [academicYearId], references: [id])
+  feePayments  FeePayment[]
+  feeBalances  FeeBalance[]
+
+  @@map("terms")
+}
+
+model Class {
+  id       String   @id @default(cuid())
+  name     String
+  level    Int
+  capacity Int      @default(40)
+  isActive Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  students Student[]
+  feeStructures FeeStructure[]
+  annualFeesStructures AnnualFeesStructure[]
+
+  @@map("classes")
+}
+
+// =====================================================
+// STUDENT MANAGEMENT
+// =====================================================
+
+model Student {
+  id              String   @id @default(cuid())
+  admissionNumber String   @unique
+  firstName       String
+  lastName        String
+  middleName      String?
+  dateOfBirth     DateTime?
+  gender          Gender?
+  schoolId        String?
+  classId         String?
+  branchId        String?
+  academicYearId  String?
+  
+  // Contact Information
+  parentName      String?
+  parentPhone     String?
+  parentEmail     String?
+  address         String?
+  
+  // Academic Status
+  enrollmentDate  DateTime @default(now())
+  graduationDate  DateTime?
+  status          StudentStatus @default(ACTIVE)
+  
+  // Fees Information
+  feesBalanceBf   Decimal  @default(0) @db.Decimal(10, 2) // Brought Forward
+  feesBalanceCf   Decimal  @default(0) @db.Decimal(10, 2) // Current Fees
+  feesBalanceDr   Decimal  @default(0) @db.Decimal(10, 2) // Debit
+  feesBalanceCr   Decimal  @default(0) @db.Decimal(10, 2) // Credit
+  feesBalanceDrp  Decimal  @default(0) @db.Decimal(10, 2) // Debit Previous
+  feesBalanceCrp  Decimal  @default(0) @db.Decimal(10, 2) // Credit Previous
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  school       School?       @relation(fields: [schoolId], references: [id])
+  class        Class?        @relation(fields: [classId], references: [id])
+  branch       Branch?       @relation(fields: [branchId], references: [id])
+  academicYear AcademicYear? @relation(fields: [academicYearId], references: [id])
+  
+  feePayments  FeePayment[]
+  feeBalances  FeeBalance[]
+  otherCharges OtherCharge[]
+
+  @@map("students")
+}
+
+// =====================================================
+// FEES STRUCTURE
+// =====================================================
+
+model FeeType {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  isMandatory Boolean  @default(true)
+  isRecurring Boolean  @default(true)
+  frequency   FeeFrequency @default(TERM)
+  createdAt   DateTime @default(now())
+
+  feeStructures FeeStructure[]
+  annualFeesStructures AnnualFeesStructure[]
+  paymentDetails PaymentDetail[]
+  feeBalances FeeBalance[]
+
+  @@map("fee_types")
+}
+
+model FeeStructure {
+  id             String   @id @default(cuid())
+  academicYearId String
+  classId        String
+  feeTypeId      String
+  amount         Decimal  @db.Decimal(10, 2)
+  term1Amount    Decimal  @default(0) @db.Decimal(10, 2)
+  term2Amount    Decimal  @default(0) @db.Decimal(10, 2)
+  term3Amount    Decimal  @default(0) @db.Decimal(10, 2)
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  academicYear AcademicYear @relation(fields: [academicYearId], references: [id])
+  class        Class        @relation(fields: [classId], references: [id])
+  feeType      FeeType      @relation(fields: [feeTypeId], references: [id])
+
+  @@map("fee_structure")
+}
+
+model AnnualFeesStructure {
+  id                String   @id @default(cuid())
+  academicYearId    String
+  classId           String
+  feeTypeId         String
+  feesAmountTerm1   Decimal  @default(0) @db.Decimal(10, 2)
+  feesAmountTerm2   Decimal  @default(0) @db.Decimal(10, 2)
+  feesAmountTerm3   Decimal  @default(0) @db.Decimal(10, 2)
+  feesAmountTerm1b2 Decimal  @default(0) @db.Decimal(10, 2)
+  feesAmountTerm2b2 Decimal  @default(0) @db.Decimal(10, 2)
+  feesAmountTerm3b2 Decimal  @default(0) @db.Decimal(10, 2)
+  createdAt         DateTime @default(now())
+
+  academicYear AcademicYear @relation(fields: [academicYearId], references: [id])
+  class        Class        @relation(fields: [classId], references: [id])
+  feeType      FeeType      @relation(fields: [feeTypeId], references: [id])
+
+  @@map("annual_fees_structure")
+}
+
+// =====================================================
+// PAYMENTS & TRANSACTIONS
+// =====================================================
+
+model PaymentMethod {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+
+  feePayments FeePayment[]
+
+  @@map("payment_methods")
+}
+
+model FeePayment {
+  id              String   @id @default(cuid())
+  studentId       String
+  academicYearId  String
+  termId          String?
+  paymentDate     DateTime
+  receiptNumber   String   @unique
+  amountPaid      Decimal  @db.Decimal(10, 2)
+  paymentMethodId String?
+  referenceNumber String?
+  notes           String?
+  createdBy       String? // Reference to users table
+  createdAt       DateTime @default(now())
+
+  student       Student        @relation(fields: [studentId], references: [id])
+  academicYear  AcademicYear   @relation(fields: [academicYearId], references: [id])
+  term          Term?          @relation(fields: [termId], references: [id])
+  paymentMethod PaymentMethod? @relation(fields: [paymentMethodId], references: [id])
+  
+  paymentDetails PaymentDetail[]
+
+  @@map("fee_payments")
+}
+
+model PaymentDetail {
+  id         String   @id @default(cuid())
+  paymentId  String
+  feeTypeId  String
+  amount     Decimal  @db.Decimal(10, 2)
+  createdAt  DateTime @default(now())
+
+  payment FeePayment @relation(fields: [paymentId], references: [id])
+  feeType FeeType   @relation(fields: [feeTypeId], references: [id])
+
+  @@map("payment_details")
+}
+
+model FeeBalance {
+  id            String   @id @default(cuid())
+  studentId     String
+  academicYearId String
+  termId        String?
+  feeTypeId     String
+  amountCharged Decimal  @default(0) @db.Decimal(10, 2)
+  amountPaid    Decimal  @default(0) @db.Decimal(10, 2)
+  balance       Decimal  @default(0) @db.Decimal(10, 2)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  student      Student      @relation(fields: [studentId], references: [id])
+  academicYear AcademicYear @relation(fields: [academicYearId], references: [id])
+  term         Term?        @relation(fields: [termId], references: [id])
+  feeType      FeeType      @relation(fields: [feeTypeId], references: [id])
+
+  @@map("fee_balances")
+}
+
+model OtherCharge {
+  id                String   @id @default(cuid())
+  studentId         String
+  academicYearId    String
+  chargeType        String
+  description       String?
+  admissionFeeTerm1 Decimal  @default(0) @db.Decimal(10, 2)
+  admissionFeeTerm2 Decimal  @default(0) @db.Decimal(10, 2)
+  admissionFeeTerm3 Decimal  @default(0) @db.Decimal(10, 2)
+  amount            Decimal  @db.Decimal(10, 2)
+  chargeDate        DateTime
+  isPaid            Boolean  @default(false)
+  createdAt         DateTime @default(now())
+
+  student      Student      @relation(fields: [studentId], references: [id])
+  academicYear AcademicYear @relation(fields: [academicYearId], references: [id])
+
+  @@map("other_charges")
+}
+
+// =====================================================
+// EMPLOYEE MANAGEMENT
+// =====================================================
+
+model Employee {
+  id             String   @id @default(cuid())
+  employeeNumber String   @unique
+  firstName      String
+  lastName       String
+  middleName     String?
+  department     String?
+  position       String?
+  email          String?
+  phone          String?
+  hireDate       DateTime?
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now())
+
+  payroll Payroll[]
+
+  @@map("employees")
+}
+
+model Payroll {
+  id                      String   @id @default(cuid())
+  employeeId              String
+  month                   Int
+  year                    Int
+  grossConsolidatedSalary Decimal  @default(0) @db.Decimal(10, 2)
+  overtimePay             Decimal  @default(0) @db.Decimal(10, 2)
+  travellingAllowance     Decimal  @default(0) @db.Decimal(10, 2)
+  leavePay                Decimal  @default(0) @db.Decimal(10, 2)
+  otherEarnings           Decimal  @default(0) @db.Decimal(10, 2)
+  nonTaxableEarnings      Decimal  @default(0) @db.Decimal(10, 2)
+  bonusPaid               Decimal  @default(0) @db.Decimal(10, 2)
+  lessAbsence             Decimal  @default(0) @db.Decimal(10, 2)
+  grossPay                Decimal  @default(0) @db.Decimal(10, 2)
+  paye                    Decimal  @default(0) @db.Decimal(10, 2)
+  netPay                  Decimal  @default(0) @db.Decimal(10, 2)
+  createdAt               DateTime @default(now())
+
+  employee Employee @relation(fields: [employeeId], references: [id])
+
+  @@map("payroll")
+}
+
+// =====================================================
+// USER MANAGEMENT & AUTHENTICATION
+// =====================================================
+
+model User {
+  id            String   @id @default(cuid())
+  email         String   @unique
+  passwordHash  String
+  firstName     String
+  lastName      String
+  role          UserRole
+  isActive      Boolean  @default(true)
+  lastLogin     DateTime?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  userPermissions UserPermission[]
+  auditLogs       AuditLog[]
+  reports         Report[]
+
+  @@map("users")
+}
+
+model UserPermission {
+  id        String   @id @default(cuid())
+  userId    String
+  permission String
+  granted   Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@map("user_permissions")
+}
+
+// =====================================================
+// REPORTING & AUDIT
+// =====================================================
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  userId    String?
+  action    String
+  tableName String?
+  recordId  String?
+  oldValues Json?
+  newValues Json?
+  ipAddress String?
+  userAgent String?
+  createdAt DateTime @default(now())
+
+  user User? @relation(fields: [userId], references: [id])
+
+  @@map("audit_log")
+}
+
+model Report {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  reportType  String
+  parameters  Json?
+  createdBy   String?
+  createdAt   DateTime @default(now())
+
+  user User? @relation(fields: [createdBy], references: [id])
+
+  @@map("reports")
+}
+
+// =====================================================
+// ENUMS
+// =====================================================
+
+enum Gender {
+  MALE
+  FEMALE
+  OTHER
+}
+
+enum StudentStatus {
+  ACTIVE
+  GRADUATED
+  TRANSFERRED
+  SUSPENDED
+}
+
+enum FeeFrequency {
+  ONCE
+  TERM
+  MONTH
+  YEAR
+}
+
+enum UserRole {
+  ADMIN
+  TEACHER
+  ACCOUNTANT
+  PARENT
+}
