@@ -6,7 +6,6 @@ const prisma = new PrismaClient()
 export async function GET(request: NextRequest) {
   try {
     const feeTypes = await prisma.feeType.findMany({
-      where: { isActive: true },
       orderBy: { name: 'asc' }
     })
 

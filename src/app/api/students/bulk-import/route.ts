@@ -15,9 +15,6 @@ interface StudentImportData {
   parentPhone: string
   parentEmail: string
   address: string
-  emergencyContact?: string
-  medicalConditions?: string
-  allergies?: string
 }
 
 interface ImportResult {
@@ -177,9 +174,6 @@ export async function POST(request: NextRequest) {
             parentPhone: studentData.parentPhone.trim(),
             parentEmail: studentData.parentEmail.trim(),
             address: studentData.address.trim(),
-            emergencyContact: studentData.emergencyContact?.trim() || null,
-            medicalConditions: studentData.medicalConditions?.trim() || null,
-            allergies: studentData.allergies?.trim() || null,
             status: 'ACTIVE'
           }
         })
@@ -217,4 +211,5 @@ export async function POST(request: NextRequest) {
     await prisma.$disconnect()
   }
 }
+
 

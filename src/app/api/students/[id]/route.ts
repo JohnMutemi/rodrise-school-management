@@ -5,11 +5,12 @@ const prisma = new PrismaClient()
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
+  const { id } = await params
   try {
     const student = await prisma.student.findUnique({
-      where: { id: params.id },
+      where: { id },
       include: {
         class: true,
         school: true,
@@ -56,14 +57,15 @@ export async function GET(
 
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
+  const { id } = await params
   try {
     const body = await request.json()
     
     // Check if student exists
     const existingStudent = await prisma.student.findUnique({
-      where: { id: params.id }
+      where: { id }
     })
 
     if (!existingStudent) {
@@ -89,7 +91,7 @@ export async function PUT(
 
     // Update student
     const updatedStudent = await prisma.student.update({
-      where: { id: params.id },
+      where: { id },
       data: {
         admissionNumber: body.admissionNumber,
         firstName: body.firstName,
@@ -128,12 +130,13 @@ export async function PUT(
 
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
+  const { id } = await params
   try {
     // Check if student exists
     const existingStudent = await prisma.student.findUnique({
-      where: { id: params.id }
+      where: { id }
     })
 
     if (!existingStudent) {
@@ -145,11 +148,11 @@ export async function DELETE(
 
     // Check if student has any payments or balances
     const hasPayments = await prisma.feePayment.findFirst({
-      where: { studentId: params.id }
+      where: { studentId: id }
     })
 
     const hasBalances = await prisma.feeBalance.findFirst({
-      where: { studentId: params.id }
+      where: { studentId: id }
     })
 
     if (hasPayments || hasBalances) {
@@ -161,7 +164,7 @@ export async function DELETE(
 
     // Delete student
     await prisma.student.delete({
-      where: { id: params.id }
+      where: { id }
     })
 
     return NextResponse.json({ message: 'Student deleted successfully' })
