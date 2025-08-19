@@ -4,9 +4,12 @@
   "private": true,
   "scripts": {
     "dev": "next dev --turbopack",
-    "build": "next build",
+    "build": "prisma generate && next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "postinstall": "prisma generate",
+    "create-user": "npx tsx tools/create-test-user.ts",
+    "seed-data": "npx tsx tools/seed-data.ts"
   },
   "dependencies": {
     "@auth/prisma-adapter": "^2.10.0",
