@@ -1,8 +1,10 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import DashboardLayout from "@/components/layout/dashboard-layout"
 import PhotoReceiptModal from "@/components/modals/photo-receipt-modal"
+import { useTheme, themes } from "@/contexts/ThemeContext"
+import { FeePayment } from "@/types"
 
 interface Payment {
   id: string
@@ -22,57 +24,65 @@ export default function PaymentsPage() {
   const [activeTab, setActiveTab] = useState<'payments' | 'receipts'>('payments')
   const [showAddForm, setShowAddForm] = useState(false)
   const [showPhotoReceiptModal, setShowPhotoReceiptModal] = useState(false)
+  const [payments, setPayments] = useState<FeePayment[]>([])
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  
+  // Always call useTheme hook, but handle the case where it might not be available
+  let themeContext;
+  try {
+    themeContext = useTheme();
+  } catch (error) {
+    console.warn('Theme context not available in payments page');
+  }
+  
+  // Safe theme access with fallback
+  const currentTheme = themes[themeContext?.theme || 'cyan'] || themes.cyan;
 
-  // Mock data for payments
-  const mockPayments: Payment[] = [
-    {
-      id: "1",
-      receiptNumber: "RCP001",
-      studentName: "John Doe",
-      studentId: "STU001",
-      feeType: "Tuition Fee",
-      term: "Term 1",
-      amount: 500,
-      paymentMethod: "Cash",
-      paymentDate: "2024-01-15",
-      status: "Completed",
-      referenceNumber: "REF001"
-    },
-    {
-      id: "2",
-      receiptNumber: "RCP002",
-      studentName: "Sarah Smith",
-      studentId: "STU002",
-      feeType: "Library Fee",
-      term: "Term 1",
-      amount: 50,
-      paymentMethod: "Bank Transfer",
-      paymentDate: "2024-01-16",
-      status: "Completed",
-      referenceNumber: "REF002"
-    },
-    {
-      id: "3",
-      receiptNumber: "RCP003",
-      studentName: "Mike Johnson",
-      studentId: "STU003",
-      feeType: "Laboratory Fee",
-      term: "Term 1",
-      amount: 100,
-      paymentMethod: "Mobile Money",
-      paymentDate: "2024-01-17",
-      status: "Pending",
-      referenceNumber: "REF003"
+  // Fetch payments from API
+  useEffect(() => {
+    const fetchPayments = async () => {
+      setLoading(true)
+      setError(null)
+      try {
+        const response = await fetch('/api/payments')
+        if (!response.ok) {
+          throw new Error('Failed to fetch payments')
+        }
+        const data = await response.json()
+        setPayments(data.payments || [])
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'An error occurred')
+      } finally {
+        setLoading(false)
+      }
     }
-  ]
 
-  const totalPayments = mockPayments.reduce((sum, payment) => sum + payment.amount, 0)
-  const completedPayments = mockPayments.filter(p => p.status === 'Completed').length
-  const pendingPayments = mockPayments.filter(p => p.status === 'Pending').length
+    fetchPayments()
+  }, [])
+
+  // Transform payments to display format
+  const displayPayments: Payment[] = payments.map(payment => ({
+    id: payment.id,
+    receiptNumber: payment.receiptNumber,
+    studentName: `${payment.student?.firstName || ''} ${payment.student?.lastName || ''}`,
+    studentId: payment.studentId,
+    feeType: payment.paymentDetails?.[0]?.feeType?.name || 'Multiple',
+    term: payment.term?.name || '',
+    amount: parseFloat(payment.amountPaid.toString()),
+    paymentMethod: payment.paymentMethod?.name || 'Unknown',
+    paymentDate: new Date(payment.paymentDate).toLocaleDateString(),
+    status: "Completed", // All payments in database are completed
+    referenceNumber: payment.referenceNumber || undefined
+  }))
+
+  const totalPayments = displayPayments.reduce((sum: number, payment: Payment) => sum + payment.amount, 0)
+  const completedPayments = displayPayments.filter((p: Payment) => p.status === 'Completed').length
+  const pendingPayments = displayPayments.filter((p: Payment) => p.status === 'Pending').length
 
   return (
     <DashboardLayout>
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-green-50 to-emerald-50 p-6">
+      <div className="min-h-screen bg-gradient-to-br from-white/10 to-white/5 backdrop-blur-sm p-6">
         {/* Enhanced Header */}
         <div className="mb-8">
           <div className="flex items-center space-x-3 mb-2">
@@ -81,7 +91,7 @@ export default function PaymentsPage() {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z" />
               </svg>
             </div>
-            <h1 className="text-3xl font-bold bg-gradient-to-r from-gray-900 to-gray-700 bg-clip-text text-transparent">
+            <h1 className="text-3xl font-bold text-white">
               Payments
             </h1>
           </div>
@@ -95,7 +105,7 @@ export default function PaymentsPage() {
               <div>
                 <p className="text-sm font-medium text-gray-500 mb-1">Total Payments</p>
                 <p className="text-3xl font-bold bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent">
-                  {mockPayments.length}
+                  {displayPayments.length}
                 </p>
               </div>
               <div className="p-3 bg-gradient-to-r from-indigo-100 to-purple-100 rounded-xl">
@@ -296,7 +306,7 @@ export default function PaymentsPage() {
                         </tr>
                       </thead>
                       <tbody className="bg-white divide-y divide-gray-100">
-                        {mockPayments.map((payment) => (
+                        {displayPayments.map((payment: Payment) => (
                           <tr key={payment.id} className="hover:bg-gradient-to-r hover:from-green-50 hover:to-emerald-50 transition-all duration-200">
                             <td className="px-6 py-4 whitespace-nowrap">
                               <div className="text-sm font-semibold text-gray-900">{payment.receiptNumber}</div>
@@ -355,7 +365,7 @@ export default function PaymentsPage() {
                   </div>
                 </div>
 
-                {mockPayments.length === 0 && (
+                {displayPayments.length === 0 && (
                   <div className="text-center py-12">
                     <div className="mx-auto w-24 h-24 bg-gradient-to-r from-gray-100 to-gray-200 rounded-full flex items-center justify-center mb-4">
                       <svg className="w-12 h-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -396,7 +406,7 @@ export default function PaymentsPage() {
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                  {mockPayments.map((payment) => (
+                  {displayPayments.map((payment: Payment) => (
                     <div key={payment.id} className="bg-white rounded-2xl shadow-lg border border-gray-100 p-6 hover:shadow-xl transition-all duration-300 transform hover:-translate-y-1">
                       <div className="flex justify-between items-start mb-4">
                         <div>

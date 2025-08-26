@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -17,6 +17,8 @@ interface AddStudentModalProps {
   isOpen: boolean
   onClose: () => void
   onSubmit: (data: StudentFormData) => Promise<void>
+  classes: any[]
+  academicYears: any[]
 }
 
 interface StudentFormData {
@@ -24,9 +26,11 @@ interface StudentFormData {
   firstName: string
   lastName: string
   middleName?: string
-  dateOfBirth: Date
+  dateOfBirth: string // Changed to string to match API expectations
   gender: 'MALE' | 'FEMALE'
   classId: string
+  academicYearId: string
+  schoolId: string
   parentName: string
   parentPhone: string
   parentEmail: string
@@ -36,16 +40,19 @@ interface StudentFormData {
   allergies?: string
 }
 
-export default function AddStudentModal({ isOpen, onClose, onSubmit }: AddStudentModalProps) {
+export default function AddStudentModal({ isOpen, onClose, onSubmit, classes, academicYears }: AddStudentModalProps): JSX.Element {
   const [isLoading, setIsLoading] = useState(false)
+  const [isClient, setIsClient] = useState(false)
   const [formData, setFormData] = useState<StudentFormData>({
     admissionNumber: '',
     firstName: '',
     lastName: '',
     middleName: '',
-    dateOfBirth: new Date(),
+    dateOfBirth: new Date().toISOString().split('T')[0], // Initialize as ISO date string
     gender: 'MALE',
     classId: '',
+    academicYearId: '',
+    schoolId: 'default',
     parentName: '',
     parentPhone: '',
     parentEmail: '',
@@ -56,16 +63,38 @@ export default function AddStudentModal({ isOpen, onClose, onSubmit }: AddStuden
   })
 
   const [errors, setErrors] = useState<Partial<StudentFormData>>({})
+  const [apiError, setApiError] = useState<string | null>(null)
 
-  // Mock data - in real app, this would come from API
-  const classes = [
-    { id: '1', name: 'Grade 1A' },
-    { id: '2', name: 'Grade 2A' },
-    { id: '3', name: 'Grade 3A' },
-    { id: '4', name: 'Grade 4A' },
-    { id: '5', name: 'Grade 5A' },
-    { id: '6', name: 'Grade 6A' }
-  ]
+  // Prevent hydration issues
+  useEffect(() => {
+    setIsClient(true)
+  }, [])
+
+  // Reset form when modal opens/closes
+  useEffect(() => {
+    if (isOpen) {
+      setFormData({
+        admissionNumber: '',
+        firstName: '',
+        lastName: '',
+        middleName: '',
+        dateOfBirth: new Date().toISOString().split('T')[0],
+        gender: 'MALE',
+        classId: '',
+        academicYearId: '',
+        schoolId: 'default',
+        parentName: '',
+        parentPhone: '',
+        parentEmail: '',
+        address: '',
+        emergencyContact: '',
+        medicalConditions: '',
+        allergies: ''
+      })
+      setErrors({})
+      setApiError(null)
+    }
+  }, [isOpen])
 
   const validateForm = (): boolean => {
     const newErrors: Partial<StudentFormData> = {}
@@ -84,6 +113,10 @@ export default function AddStudentModal({ isOpen, onClose, onSubmit }: AddStuden
 
     if (!formData.classId) {
       newErrors.classId = 'Class is required'
+    }
+
+    if (!formData.academicYearId) {
+      newErrors.academicYearId = 'Academic year is required'
     }
 
     if (!formData.parentName.trim()) {
@@ -116,29 +149,14 @@ export default function AddStudentModal({ isOpen, onClose, onSubmit }: AddStuden
     }
 
     setIsLoading(true)
+    setApiError(null)
+    
     try {
       await onSubmit(formData)
       onClose()
-      // Reset form
-      setFormData({
-        admissionNumber: '',
-        firstName: '',
-        lastName: '',
-        middleName: '',
-        dateOfBirth: new Date(),
-        gender: 'MALE',
-        classId: '',
-        parentName: '',
-        parentPhone: '',
-        parentEmail: '',
-        address: '',
-        emergencyContact: '',
-        medicalConditions: '',
-        allergies: ''
-      })
-      setErrors({})
     } catch (error) {
       console.error('Error adding student:', error)
+      setApiError(error instanceof Error ? error.message : 'Failed to add student. Please try again.')
     } finally {
       setIsLoading(false)
     }
@@ -150,6 +168,29 @@ export default function AddStudentModal({ isOpen, onClose, onSubmit }: AddStuden
     if (errors[field]) {
       setErrors(prev => ({ ...prev, [field]: undefined }))
     }
+    // Clear API error when user makes changes
+    if (apiError) {
+      setApiError(null)
+    }
+  }
+
+  // Convert date to string for form handling
+  const handleDateChange = (date: Date | undefined) => {
+    if (date) {
+      handleInputChange('dateOfBirth', date.toISOString().split('T')[0])
+    }
+  }
+
+  // Convert string date to Date object for calendar
+  const getDateFromString = (dateString: string): Date | undefined => {
+    if (!dateString) return undefined
+    const date = new Date(dateString)
+    return isNaN(date.getTime()) ? undefined : date
+  }
+
+  // Don't render until client is ready
+  if (!isClient) {
+    return null
   }
 
   return (
@@ -160,6 +201,22 @@ export default function AddStudentModal({ isOpen, onClose, onSubmit }: AddStuden
             Add New Student
           </DialogTitle>
         </DialogHeader>
+
+        {apiError && (
+          <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-6">
+            <div className="flex">
+              <div className="flex-shrink-0">
+                <span className="text-red-400">⚠️</span>
+              </div>
+              <div className="ml-3">
+                <h3 className="text-sm font-medium text-red-800">Error</h3>
+                <div className="mt-2 text-sm text-red-700">
+                  {apiError}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
 
         <form onSubmit={handleSubmit} className="space-y-6">
           {/* Basic Information */}
@@ -232,14 +289,14 @@ export default function AddStudentModal({ isOpen, onClose, onSubmit }: AddStuden
                       )}
                     >
                       <CalendarIcon className="mr-2 h-4 w-4" />
-                      {formData.dateOfBirth ? format(formData.dateOfBirth, "PPP") : "Pick a date"}
+                      {formData.dateOfBirth ? format(getDateFromString(formData.dateOfBirth) || new Date(), "PPP") : "Pick a date"}
                     </Button>
                   </PopoverTrigger>
                   <PopoverContent className="w-auto p-0">
                     <Calendar
                       mode="single"
-                      selected={formData.dateOfBirth}
-                      onSelect={(date) => date && handleInputChange('dateOfBirth', date)}
+                      selected={getDateFromString(formData.dateOfBirth)}
+                      onSelect={handleDateChange}
                       initialFocus
                     />
                   </PopoverContent>
@@ -277,6 +334,25 @@ export default function AddStudentModal({ isOpen, onClose, onSubmit }: AddStuden
                 </Select>
                 {errors.classId && (
                   <p className="text-red-500 text-sm mt-1">{errors.classId}</p>
+                )}
+              </div>
+
+              <div>
+                <Label htmlFor="academicYear">Academic Year *</Label>
+                <Select value={formData.academicYearId} onValueChange={(value) => handleInputChange('academicYearId', value)}>
+                  <SelectTrigger className={cn(errors.academicYearId && "border-red-500")}>
+                    <SelectValue placeholder="Select academic year" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {academicYears.map((year) => (
+                      <SelectItem key={year.id} value={year.id}>
+                        {year.year}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {errors.academicYearId && (
+                  <p className="text-red-500 text-sm mt-1">{errors.academicYearId}</p>
                 )}
               </div>
             </div>

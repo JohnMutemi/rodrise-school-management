@@ -39,12 +39,12 @@ export function useApi<T = any>() {
 
       const response = await fetch(url, config)
 
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ error: 'Network error' }))
-        throw new Error(errorData.error || `HTTP error! status: ${response.status}`)
-      }
-
       const data = await response.json()
+      
+      if (!response.ok) {
+        throw new Error(data.error || `HTTP error! status: ${response.status}`)
+      }
+      
       setState({ data, loading: false, error: null })
       return data
 
@@ -68,112 +68,294 @@ export function useApi<T = any>() {
 
 // Specific hooks for common operations
 export function useStudents() {
-  const api = useApi()
+  const { data, loading, error, callApi, reset } = useApi()
 
   const getStudents = useCallback(async (params?: {
     search?: string
     status?: string
     page?: number
     limit?: number
+    schoolId?: string
   }) => {
     const searchParams = new URLSearchParams()
     if (params?.search) searchParams.append('search', params.search)
     if (params?.status) searchParams.append('status', params.status)
     if (params?.page) searchParams.append('page', params.page.toString())
     if (params?.limit) searchParams.append('limit', params.limit.toString())
+    searchParams.append('schoolId', params?.schoolId || 'default')
 
-    const url = `/api/students${searchParams.toString() ? `?${searchParams.toString()}` : ''}`
-    return api.callApi(url)
-  }, [api])
+    const url = `/api/students?${searchParams.toString()}`
+    return callApi(url)
+  }, [callApi])
 
   const createStudent = useCallback(async (studentData: any) => {
-    return api.callApi('/api/students', {
+    return callApi('/api/students', {
       method: 'POST',
       body: studentData
     })
-  }, [api])
+  }, [callApi])
 
   const updateStudent = useCallback(async (id: string, studentData: any) => {
-    return api.callApi(`/api/students/${id}`, {
+    return callApi(`/api/students?id=${id}`, {
       method: 'PUT',
       body: studentData
     })
-  }, [api])
+  }, [callApi])
+
+  const patchStudent = useCallback(async (id: string, studentData: any) => {
+    return callApi(`/api/students?id=${id}`, {
+      method: 'PATCH',
+      body: studentData
+    })
+  }, [callApi])
 
   const deleteStudent = useCallback(async (id: string) => {
-    return api.callApi(`/api/students/${id}`, {
+    return callApi(`/api/students?id=${id}`, {
       method: 'DELETE'
     })
-  }, [api])
+  }, [callApi])
 
   const getStudent = useCallback(async (id: string) => {
-    return api.callApi(`/api/students/${id}`)
-  }, [api])
+    return callApi(`/api/students?id=${id}`)
+  }, [callApi])
 
   return {
-    ...api,
+    data,
+    loading,
+    error,
+    reset,
     getStudents,
     createStudent,
     updateStudent,
+    patchStudent,
     deleteStudent,
     getStudent
   }
 }
 
 export function usePayments() {
-  const api = useApi()
+  const { data, loading, error, callApi, reset } = useApi()
 
   const getPayments = useCallback(async (params?: {
     studentId?: string
+    academicYearId?: string
+    termId?: string
+    paymentMethodId?: string
+    startDate?: string
+    endDate?: string
     page?: number
     limit?: number
   }) => {
     const searchParams = new URLSearchParams()
     if (params?.studentId) searchParams.append('studentId', params.studentId)
+    if (params?.academicYearId) searchParams.append('academicYearId', params.academicYearId)
+    if (params?.termId) searchParams.append('termId', params.termId)
+    if (params?.paymentMethodId) searchParams.append('paymentMethodId', params.paymentMethodId)
+    if (params?.startDate) searchParams.append('startDate', params.startDate)
+    if (params?.endDate) searchParams.append('endDate', params.endDate)
     if (params?.page) searchParams.append('page', params.page.toString())
     if (params?.limit) searchParams.append('limit', params.limit.toString())
 
     const url = `/api/payments${searchParams.toString() ? `?${searchParams.toString()}` : ''}`
-    return api.callApi(url)
-  }, [api])
+    return callApi(url)
+  }, [callApi])
 
   const createPayment = useCallback(async (paymentData: any) => {
-    return api.callApi('/api/payments', {
+    return callApi('/api/payments', {
       method: 'POST',
       body: paymentData
     })
-  }, [api])
+  }, [callApi])
+
+  const updatePayment = useCallback(async (id: string, paymentData: any) => {
+    return callApi(`/api/payments?id=${id}`, {
+      method: 'PUT',
+      body: paymentData
+    })
+  }, [callApi])
+
+  const deletePayment = useCallback(async (id: string) => {
+    return callApi(`/api/payments?id=${id}`, {
+      method: 'DELETE'
+    })
+  }, [callApi])
 
   return {
-    ...api,
+    data,
+    loading,
+    error,
+    reset,
     getPayments,
-    createPayment
+    createPayment,
+    updatePayment,
+    deletePayment
   }
 }
 
 export function useFees() {
-  const api = useApi()
+  const { data, loading, error, callApi, reset } = useApi()
 
-  const getFeeStructures = useCallback(async () => {
-    return api.callApi('/api/fees/structures')
-  }, [api])
+  const getFeeStructures = useCallback(async (params?: {
+    academicYearId?: string
+    classId?: string
+    feeTypeId?: string
+    isActive?: boolean
+  }) => {
+    const searchParams = new URLSearchParams()
+    if (params?.academicYearId) searchParams.append('academicYearId', params.academicYearId)
+    if (params?.classId) searchParams.append('classId', params.classId)
+    if (params?.feeTypeId) searchParams.append('feeTypeId', params.feeTypeId)
+    if (params?.isActive !== undefined) searchParams.append('isActive', params.isActive.toString())
 
-  const getFeeTypes = useCallback(async () => {
-    return api.callApi('/api/fees/types')
-  }, [api])
+    const url = `/api/fee-structures${searchParams.toString() ? `?${searchParams.toString()}` : ''}`
+    return callApi(url)
+  }, [callApi])
+
+  const getFeeTypes = useCallback(async (params?: {
+    isActive?: boolean
+    frequency?: string
+  }) => {
+    const searchParams = new URLSearchParams()
+    if (params?.isActive !== undefined) searchParams.append('isActive', params.isActive.toString())
+    if (params?.frequency) searchParams.append('frequency', params.frequency)
+
+    const url = `/api/fee-types${searchParams.toString() ? `?${searchParams.toString()}` : ''}`
+    return callApi(url)
+  }, [callApi])
 
   const createFeeStructure = useCallback(async (feeData: any) => {
-    return api.callApi('/api/fees/structures', {
+    return callApi('/api/fee-structures', {
       method: 'POST',
       body: feeData
     })
-  }, [api])
+  }, [callApi])
+
+  const updateFeeStructure = useCallback(async (feeData: any) => {
+    return callApi('/api/fee-structures', {
+      method: 'PUT',
+      body: feeData
+    })
+  }, [callApi])
+
+  const createFeeType = useCallback(async (feeTypeData: any) => {
+    return callApi('/api/fee-types', {
+      method: 'POST',
+      body: feeTypeData
+    })
+  }, [callApi])
 
   return {
-    ...api,
+    data,
+    loading,
+    error,
+    reset,
     getFeeStructures,
     getFeeTypes,
-    createFeeStructure
+    createFeeStructure,
+    updateFeeStructure,
+    createFeeType
+  }
+}
+
+export function useFeeBalances() {
+  const { data, loading, error, callApi, reset } = useApi()
+
+  const getFeeBalances = useCallback(async (params?: {
+    studentId?: string
+    academicYearId?: string
+    termId?: string
+    feeTypeId?: string
+    status?: 'paid' | 'unpaid' | 'partial'
+    page?: number
+    limit?: number
+  }) => {
+    const searchParams = new URLSearchParams()
+    if (params?.studentId) searchParams.append('studentId', params.studentId)
+    if (params?.academicYearId) searchParams.append('academicYearId', params.academicYearId)
+    if (params?.termId) searchParams.append('termId', params.termId)
+    if (params?.feeTypeId) searchParams.append('feeTypeId', params.feeTypeId)
+    if (params?.status) searchParams.append('status', params.status)
+    if (params?.page) searchParams.append('page', params.page.toString())
+    if (params?.limit) searchParams.append('limit', params.limit.toString())
+
+    const url = `/api/fee-balances${searchParams.toString() ? `?${searchParams.toString()}` : ''}`
+    return callApi(url)
+  }, [callApi])
+
+  const createFeeBalance = useCallback(async (balanceData: any) => {
+    return callApi('/api/fee-balances', {
+      method: 'POST',
+      body: balanceData
+    })
+  }, [callApi])
+
+  const updateFeeBalance = useCallback(async (id: string, balanceData: any) => {
+    return callApi(`/api/fee-balances?id=${id}`, {
+      method: 'PUT',
+      body: balanceData
+    })
+  }, [callApi])
+
+  const deleteFeeBalance = useCallback(async (id: string) => {
+    return callApi(`/api/fee-balances?id=${id}`, {
+      method: 'DELETE'
+    })
+  }, [callApi])
+
+  return {
+    data,
+    loading,
+    error,
+    reset,
+    getFeeBalances,
+    createFeeBalance,
+    updateFeeBalance,
+    deleteFeeBalance
+  }
+}
+
+export function usePaymentMethods() {
+  const { data, loading, error, callApi, reset } = useApi()
+
+  const getPaymentMethods = useCallback(async (params?: {
+    isActive?: boolean
+  }) => {
+    const searchParams = new URLSearchParams()
+    if (params?.isActive !== undefined) searchParams.append('isActive', params.isActive.toString())
+
+    const url = `/api/payment-methods${searchParams.toString() ? `?${searchParams.toString()}` : ''}`
+    return callApi(url)
+  }, [callApi])
+
+  const createPaymentMethod = useCallback(async (methodData: any) => {
+    return callApi('/api/payment-methods', {
+      method: 'POST',
+      body: methodData
+    })
+  }, [callApi])
+
+  const updatePaymentMethod = useCallback(async (id: string, methodData: any) => {
+    return callApi(`/api/payment-methods?id=${id}`, {
+      method: 'PUT',
+      body: methodData
+    })
+  }, [callApi])
+
+  const deletePaymentMethod = useCallback(async (id: string) => {
+    return callApi(`/api/payment-methods?id=${id}`, {
+      method: 'DELETE'
+    })
+  }, [callApi])
+
+  return {
+    data,
+    loading,
+    error,
+    reset,
+    getPaymentMethods,
+    createPaymentMethod,
+    updatePaymentMethod,
+    deletePaymentMethod
   }
 }
 

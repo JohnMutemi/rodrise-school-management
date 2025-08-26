@@ -3,41 +3,59 @@ import { PrismaClient } from '@prisma/client'
 
 const prisma = new PrismaClient()
 
+// GET - Fetch academic years
 export async function GET(request: NextRequest) {
   try {
+    const { searchParams } = new URL(request.url)
+    const schoolId = searchParams.get('schoolId') || 'default'
+    const isActive = searchParams.get('isActive')
+
+    // Build where clause
+    const where: any = {}
+    
+    if (isActive === 'true') {
+      where.isActive = true
+    }
+
+    // Get academic years
     const academicYears = await prisma.academicYear.findMany({
-      orderBy: { year: 'desc' }
+      where,
+      orderBy: {
+        year: 'desc'
+      }
     })
 
-    return NextResponse.json(academicYears)
+    return NextResponse.json({
+      academicYears
+    })
+
   } catch (error) {
     console.error('Error fetching academic years:', error)
     return NextResponse.json(
-      { error: 'Failed to fetch academic years' },
+      { error: 'Internal server error' },
       { status: 500 }
     )
   }
 }
 
+// POST - Create new academic year
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
     
     // Validate required fields
-    const { year, startDate, endDate, isActive } = body
-    
-    if (!year || !startDate || !endDate) {
+    if (!body.year) {
       return NextResponse.json(
-        { error: 'Year, start date, and end date are required' },
+        { error: 'Year is required' },
         { status: 400 }
       )
     }
 
     // Check if academic year already exists
     const existingYear = await prisma.academicYear.findUnique({
-      where: { year }
+      where: { year: body.year }
     })
-
+    
     if (existingYear) {
       return NextResponse.json(
         { error: 'Academic year already exists' },
@@ -45,29 +63,25 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // If this is set as active, deactivate other years
-    if (isActive) {
-      await prisma.academicYear.updateMany({
-        where: { isActive: true },
-        data: { isActive: false }
-      })
-    }
-
     // Create academic year
     const academicYear = await prisma.academicYear.create({
       data: {
-        year,
-        startDate: new Date(startDate),
-        endDate: new Date(endDate),
-        isActive: isActive || false
+        year: body.year,
+        isActive: body.isActive ?? false,
+        startDate: body.startDate ? new Date(body.startDate) : null,
+        endDate: body.endDate ? new Date(body.endDate) : null,
       }
     })
 
-    return NextResponse.json(academicYear, { status: 201 })
+    return NextResponse.json({
+      message: 'Academic year created successfully',
+      academicYear
+    }, { status: 201 })
+
   } catch (error) {
     console.error('Error creating academic year:', error)
     return NextResponse.json(
-      { error: 'Failed to create academic year' },
+      { error: 'Internal server error' },
       { status: 500 }
     )
   }

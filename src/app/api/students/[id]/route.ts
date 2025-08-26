@@ -1,30 +1,62 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { PrismaClient } from '@prisma/client'
+import { z } from 'zod'
 
 const prisma = new PrismaClient()
 
+const updateStudentSchema = z.object({
+  firstName: z.string().min(1, "First name is required").optional(),
+  lastName: z.string().min(1, "Last name is required").optional(),
+  admissionNumber: z.string().min(1, "Admission number is required").optional(),
+  dateOfBirth: z.string().optional(),
+  gender: z.enum(['MALE', 'FEMALE']).optional(),
+  classId: z.string().min(1, "Class is required").optional(),
+  academicYearId: z.string().min(1, "Academic year is required").optional(),
+  branchId: z.string().optional(),
+  schoolId: z.string().min(1, "School is required").optional(),
+  
+  // Parent Information
+  parentName: z.string().optional(),
+  parentPhone: z.string().optional(),
+  parentEmail: z.string().email().optional(),
+  address: z.string().optional(),
+  
+  // Additional Information
+  middleName: z.string().optional(),
+  previousSchool: z.string().optional(),
+  medicalConditions: z.string().optional(),
+  emergencyContact: z.string().optional(),
+  status: z.enum(['ACTIVE', 'GRADUATED', 'TRANSFERRED', 'SUSPENDED']).optional(),
+})
+
 export async function GET(
   request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: { id: string } }
 ) {
-  const { id } = await params
   try {
+    const { id } = params
+
     const student = await prisma.student.findUnique({
       where: { id },
       include: {
         class: true,
-        school: true,
-        branch: true,
         academicYear: true,
+        branch: true,
+        school: true,
         feeBalances: {
           include: {
             feeType: true,
-            term: true
+            academicYear: true,
+            term: true,
+          },
+          orderBy: {
+            createdAt: 'desc'
           }
         },
         feePayments: {
           include: {
             paymentMethod: true,
+            academicYear: true,
             term: true,
             paymentDetails: {
               include: {
@@ -32,9 +64,10 @@ export async function GET(
               }
             }
           },
-          orderBy: { paymentDate: 'desc' }
-        },
-        otherCharges: true
+          orderBy: {
+            paymentDate: 'desc'
+          }
+        }
       }
     })
 
@@ -45,11 +78,31 @@ export async function GET(
       )
     }
 
-    return NextResponse.json(student)
+    // Calculate fee statistics
+    const totalCharged = student.feeBalances.reduce((sum, balance) => 
+      sum + parseFloat(balance.amountCharged.toString()), 0
+    )
+    const totalPaid = student.feeBalances.reduce((sum, balance) => 
+      sum + parseFloat(balance.amountPaid.toString()), 0
+    )
+    const outstandingBalance = totalCharged - totalPaid
+
+    const studentWithStats = {
+      ...student,
+      feeStatistics: {
+        totalCharged,
+        totalPaid,
+        outstandingBalance,
+        lastPaymentDate: student.feePayments[0]?.paymentDate || null
+      }
+    }
+
+    return NextResponse.json(studentWithStats)
+
   } catch (error) {
     console.error('Error fetching student:', error)
     return NextResponse.json(
-      { error: 'Failed to fetch student' },
+      { error: 'Internal server error' },
       { status: 500 }
     )
   }
@@ -57,12 +110,15 @@ export async function GET(
 
 export async function PUT(
   request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: { id: string } }
 ) {
-  const { id } = await params
   try {
+    const { id } = params
     const body = await request.json()
-    
+
+    // Validate input
+    const validatedData = updateStudentSchema.parse(body)
+
     // Check if student exists
     const existingStudent = await prisma.student.findUnique({
       where: { id }
@@ -75,10 +131,11 @@ export async function PUT(
       )
     }
 
-    // Check if admission number is being changed and if it already exists
-    if (body.admissionNumber && body.admissionNumber !== existingStudent.admissionNumber) {
+    // If admission number is being updated, check for duplicates
+    if (validatedData.admissionNumber && 
+        validatedData.admissionNumber !== existingStudent.admissionNumber) {
       const duplicateStudent = await prisma.student.findUnique({
-        where: { admissionNumber: body.admissionNumber }
+        where: { admissionNumber: validatedData.admissionNumber }
       })
 
       if (duplicateStudent) {
@@ -89,40 +146,77 @@ export async function PUT(
       }
     }
 
+    // Prepare update data
+    const updateData: any = { ...validatedData }
+    if (validatedData.dateOfBirth) {
+      updateData.dateOfBirth = new Date(validatedData.dateOfBirth)
+    }
+
     // Update student
     const updatedStudent = await prisma.student.update({
       where: { id },
-      data: {
-        admissionNumber: body.admissionNumber,
-        firstName: body.firstName,
-        lastName: body.lastName,
-        middleName: body.middleName,
-        dateOfBirth: body.dateOfBirth ? new Date(body.dateOfBirth) : null,
-        gender: body.gender,
-        schoolId: body.schoolId,
-        classId: body.classId,
-        branchId: body.branchId,
-        academicYearId: body.academicYearId,
-        parentName: body.parentName,
-        parentPhone: body.parentPhone,
-        parentEmail: body.parentEmail,
-        address: body.address,
-        status: body.status,
-        graduationDate: body.graduationDate ? new Date(body.graduationDate) : null
-      },
+      data: updateData,
       include: {
         class: true,
-        school: true,
+        academicYear: true,
         branch: true,
-        academicYear: true
+        school: true,
+        feeBalances: {
+          include: {
+            feeType: true,
+            academicYear: true,
+            term: true,
+          }
+        },
+        feePayments: {
+          include: {
+            paymentMethod: true,
+            academicYear: true,
+            term: true,
+          },
+          orderBy: {
+            paymentDate: 'desc'
+          },
+          take: 5
+        }
       }
     })
 
-    return NextResponse.json(updatedStudent)
+    // Calculate updated statistics
+    const totalCharged = updatedStudent.feeBalances.reduce((sum, balance) => 
+      sum + parseFloat(balance.amountCharged.toString()), 0
+    )
+    const totalPaid = updatedStudent.feeBalances.reduce((sum, balance) => 
+      sum + parseFloat(balance.amountPaid.toString()), 0
+    )
+    const outstandingBalance = totalCharged - totalPaid
+
+    const studentWithStats = {
+      ...updatedStudent,
+      feeStatistics: {
+        totalCharged,
+        totalPaid,
+        outstandingBalance,
+        lastPaymentDate: updatedStudent.feePayments[0]?.paymentDate || null
+      }
+    }
+
+    return NextResponse.json({
+      message: 'Student updated successfully',
+      student: studentWithStats
+    })
+
   } catch (error) {
+    if (error instanceof z.ZodError) {
+      return NextResponse.json(
+        { error: 'Validation error', details: error.errors },
+        { status: 400 }
+      )
+    }
+
     console.error('Error updating student:', error)
     return NextResponse.json(
-      { error: 'Failed to update student' },
+      { error: 'Internal server error' },
       { status: 500 }
     )
   }
@@ -130,10 +224,11 @@ export async function PUT(
 
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: { id: string } }
 ) {
-  const { id } = await params
   try {
+    const { id } = params
+
     // Check if student exists
     const existingStudent = await prisma.student.findUnique({
       where: { id }
@@ -146,32 +241,36 @@ export async function DELETE(
       )
     }
 
-    // Check if student has any payments or balances
+    // Check if student has any payments (soft delete consideration)
     const hasPayments = await prisma.feePayment.findFirst({
       where: { studentId: id }
     })
 
-    const hasBalances = await prisma.feeBalance.findFirst({
-      where: { studentId: id }
-    })
+    if (hasPayments) {
+      // Soft delete - update status to TRANSFERRED
+      await prisma.student.update({
+        where: { id },
+        data: { status: 'TRANSFERRED' }
+      })
 
-    if (hasPayments || hasBalances) {
-      return NextResponse.json(
-        { error: 'Cannot delete student with existing payments or balances' },
-        { status: 400 }
-      )
+      return NextResponse.json({
+        message: 'Student marked as transferred (soft delete)'
+      })
     }
 
-    // Delete student
+    // Hard delete if no payments exist
     await prisma.student.delete({
       where: { id }
     })
 
-    return NextResponse.json({ message: 'Student deleted successfully' })
+    return NextResponse.json({
+      message: 'Student deleted successfully'
+    })
+
   } catch (error) {
     console.error('Error deleting student:', error)
     return NextResponse.json(
-      { error: 'Failed to delete student' },
+      { error: 'Internal server error' },
       { status: 500 }
     )
   }

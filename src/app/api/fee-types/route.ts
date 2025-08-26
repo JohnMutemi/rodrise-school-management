@@ -4,20 +4,21 @@ import { z } from 'zod'
 
 const prisma = new PrismaClient()
 
-const createClassSchema = z.object({
-  name: z.string().min(1, "Class name is required"),
-  level: z.number().min(1, "Level must be at least 1"),
-  capacity: z.number().min(1, "Capacity must be at least 1").default(40),
-  isActive: z.boolean().default(true),
-  nextClassId: z.string().optional(),
+const createFeeTypeSchema = z.object({
+  name: z.string().min(1, "Fee type name is required"),
+  description: z.string().optional(),
+  isMandatory: z.boolean().default(true),
+  isRecurring: z.boolean().default(true),
+  frequency: z.enum(['ONCE', 'TERM', 'YEAR', 'MONTH']).default('TERM'),
 })
 
-const updateClassSchema = createClassSchema.partial()
+const updateFeeTypeSchema = createFeeTypeSchema.partial()
 
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url)
     const isActive = searchParams.get('isActive')
+    const frequency = searchParams.get('frequency')
 
     // Build where clause
     const where: any = {}
@@ -26,27 +27,31 @@ export async function GET(request: NextRequest) {
       where.isActive = isActive === 'true'
     }
 
-    const classes = await prisma.class.findMany({
+    if (frequency) {
+      where.frequency = frequency
+    }
+
+    const feeTypes = await prisma.feeType.findMany({
       where,
       include: {
         _count: {
           select: {
-            students: true,
             feeStructures: true,
+            feeBalances: true,
           }
         }
       },
       orderBy: {
-        level: 'asc'
+        name: 'asc'
       }
     })
 
     return NextResponse.json({
-      classes
+      feeTypes
     })
 
   } catch (error) {
-    console.error('Error fetching classes:', error)
+    console.error('Error fetching fee types:', error)
     return NextResponse.json(
       { error: 'Internal server error' },
       { status: 500 }
@@ -59,58 +64,47 @@ export async function POST(request: NextRequest) {
     const body = await request.json()
     
     // Validate input
-    const validatedData = createClassSchema.parse(body)
+    const validatedData = createFeeTypeSchema.parse(body)
     
-    // Check if class name already exists
-    const existingClass = await prisma.class.findFirst({
+    // Check if fee type name already exists
+    const existingFeeType = await prisma.feeType.findFirst({
       where: {
-        name: validatedData.name
+        name: {
+          equals: validatedData.name,
+          mode: 'insensitive'
+        }
       }
     })
     
-    if (existingClass) {
+    if (existingFeeType) {
       return NextResponse.json(
-        { error: 'Class name already exists' },
+        { error: 'Fee type name already exists' },
         { status: 400 }
       )
     }
 
-    // Check if level already exists
-    const existingLevel = await prisma.class.findFirst({
-      where: {
-        level: validatedData.level
-      }
-    })
-    
-    if (existingLevel) {
-      return NextResponse.json(
-        { error: 'Class level already exists' },
-        { status: 400 }
-      )
-    }
-
-    // Create class
-    const classRecord = await prisma.class.create({
+    // Create fee type
+    const feeType = await prisma.feeType.create({
       data: {
         name: validatedData.name,
-        level: validatedData.level,
-        capacity: validatedData.capacity,
-        isActive: validatedData.isActive,
-        nextClassId: validatedData.nextClassId,
+        description: validatedData.description,
+        isMandatory: validatedData.isMandatory,
+        isRecurring: validatedData.isRecurring,
+        frequency: validatedData.frequency,
       },
       include: {
         _count: {
           select: {
-            students: true,
             feeStructures: true,
+            feeBalances: true,
           }
         }
       }
     })
 
     return NextResponse.json({
-      message: 'Class created successfully',
-      class: classRecord
+      message: 'Fee type created successfully',
+      feeType
     }, { status: 201 })
 
   } catch (error) {
@@ -121,7 +115,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    console.error('Error creating class:', error)
+    console.error('Error creating fee type:', error)
     return NextResponse.json(
       { error: 'Internal server error' },
       { status: 500 }

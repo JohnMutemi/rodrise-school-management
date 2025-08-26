@@ -1,7 +1,10 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import DashboardLayout from "@/components/layout/dashboard-layout"
+import { useTheme, themes } from "@/contexts/ThemeContext"
+import { FeeBalance } from "@/types"
+import { useFeeBalances } from "@/hooks/useApi"
 
 interface StudentBalance {
   id: string
@@ -35,100 +38,62 @@ interface FeeStatement {
 export default function BalancesPage() {
   const [activeTab, setActiveTab] = useState<'balances' | 'statements'>('balances')
   const [selectedStudent, setSelectedStudent] = useState<string>('')
+  
+  // Always call useTheme hook - hooks must be called unconditionally
+  const themeContext = useTheme();
+  
+  // Safe theme access with fallback
+  const currentTheme = themes[themeContext?.theme || 'cyan'] || themes.cyan;
 
-  // Mock data for student balances
-  const mockStudentBalances: StudentBalance[] = [
-    {
-      id: "1",
-      studentName: "John Doe",
-      studentId: "STU001",
-      class: "Grade 10A",
-      academicYear: "2024-2025",
-      totalFees: 1650,
-      totalPaid: 500,
-      outstandingBalance: 1150,
-      lastPaymentDate: "2024-01-15",
-      status: 'current',
-      term1Balance: 500,
-      term2Balance: 500,
-      term3Balance: 150
-    },
-    {
-      id: "2",
-      studentName: "Sarah Smith",
-      studentId: "STU002",
-      class: "Grade 9B",
-      academicYear: "2024-2025",
-      totalFees: 1200,
-      totalPaid: 1200,
-      outstandingBalance: 0,
-      lastPaymentDate: "2024-01-20",
-      status: 'paid',
-      term1Balance: 0,
-      term2Balance: 0,
-      term3Balance: 0
-    },
-    {
-      id: "3",
-      studentName: "Mike Johnson",
-      studentId: "STU003",
-      class: "Grade 11A",
-      academicYear: "2024-2025",
-      totalFees: 1800,
-      totalPaid: 300,
-      outstandingBalance: 1500,
-      lastPaymentDate: "2024-01-10",
-      status: 'overdue',
-      term1Balance: 600,
-      term2Balance: 600,
-      term3Balance: 300
+  // Use the fee balances hook
+  const { data, loading, error, getFeeBalances } = useFeeBalances()
+
+  // Fetch fee balances from API
+  useEffect(() => {
+    getFeeBalances()
+  }, [])
+
+  const feeBalances = data?.feeBalances || []
+
+  // Transform fee balances to student balances format
+  const studentBalances: StudentBalance[] = feeBalances.reduce((acc: StudentBalance[], balance: FeeBalance) => {
+    const existingStudent = acc.find(s => s.studentId === balance.studentId)
+    const amountCharged = parseFloat(balance.amountCharged.toString())
+    const amountPaid = parseFloat(balance.amountPaid.toString())
+    const balanceAmount = parseFloat(balance.balance.toString())
+    
+    if (existingStudent) {
+      existingStudent.totalFees += amountCharged
+      existingStudent.totalPaid += amountPaid
+      existingStudent.outstandingBalance += balanceAmount
+    } else {
+      acc.push({
+        id: balance.studentId,
+        studentName: `${balance.student?.firstName || ''} ${balance.student?.lastName || ''}`,
+        studentId: balance.studentId,
+        class: balance.student?.class?.name || '',
+        academicYear: balance.academicYear?.year || '',
+        totalFees: amountCharged,
+        totalPaid: amountPaid,
+        outstandingBalance: balanceAmount,
+        lastPaymentDate: '', // Will be populated from payments
+        status: balanceAmount <= 0 ? 'paid' : balanceAmount < amountCharged ? 'current' : 'overdue',
+        term1Balance: 0, // Will be calculated based on terms
+        term2Balance: 0,
+        term3Balance: 0
+      })
     }
-  ]
+    
+    return acc
+  }, [])
 
-  // Mock data for fee statements
-  const mockFeeStatements: FeeStatement[] = [
-    {
-      id: "1",
-      studentName: "John Doe",
-      studentId: "STU001",
-      feeType: "Tuition Fee",
-      term: "Term 1",
-      amount: 500,
-      paid: 500,
-      balance: 0,
-      dueDate: "2024-01-31",
-      status: 'paid'
-    },
-    {
-      id: "2",
-      studentName: "John Doe",
-      studentId: "STU001",
-      feeType: "Tuition Fee",
-      term: "Term 2",
-      amount: 500,
-      paid: 0,
-      balance: 500,
-      dueDate: "2024-04-30",
-      status: 'unpaid'
-    },
-    {
-      id: "3",
-      studentName: "John Doe",
-      studentId: "STU001",
-      feeType: "Library Fee",
-      term: "Term 1",
-      amount: 150,
-      paid: 0,
-      balance: 150,
-      dueDate: "2024-01-31",
-      status: 'unpaid'
-    }
-  ]
+  // Real fee statements data will be loaded from API
+  const feeStatements: FeeStatement[] = []
 
-  const totalOutstanding = mockStudentBalances.reduce((sum, balance) => sum + balance.outstandingBalance, 0)
-  const overdueStudents = mockStudentBalances.filter(b => b.status === 'overdue').length
-  const currentStudents = mockStudentBalances.filter(b => b.status === 'current').length
-  const paidStudents = mockStudentBalances.filter(b => b.status === 'paid').length
+  const totalOutstanding = studentBalances.reduce((sum: number, balance: StudentBalance) => sum + balance.outstandingBalance, 0)
+  const overdueStudents = studentBalances.filter((b: StudentBalance) => b.status === 'overdue').length
+  const currentStudents = studentBalances.filter((b: StudentBalance) => b.status === 'current').length
+  const paidStudents = studentBalances.filter((b: StudentBalance) => b.status === 'paid').length
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -150,7 +115,7 @@ export default function BalancesPage() {
 
   return (
     <DashboardLayout>
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-orange-50 to-red-50 p-6">
+      <div className="min-h-screen bg-gradient-to-br from-white/10 to-white/5 backdrop-blur-sm p-6">
         {/* Enhanced Header */}
         <div className="mb-8">
           <div className="flex items-center space-x-3 mb-2">
@@ -159,7 +124,7 @@ export default function BalancesPage() {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
               </svg>
             </div>
-            <h1 className="text-3xl font-bold bg-gradient-to-r from-gray-900 to-gray-700 bg-clip-text text-transparent">
+            <h1 className="text-3xl font-bold text-white">
               Balances
             </h1>
           </div>
@@ -276,8 +241,8 @@ export default function BalancesPage() {
               <div>
                 <div className="flex justify-between items-center mb-6">
                   <div>
-                    <h3 className="text-2xl font-bold text-gray-900 mb-1">Student Balances</h3>
-                    <p className="text-gray-600">Monitor outstanding balances and payment status</p>
+                    <h3 className="text-2xl font-bold text-white mb-1">Student Balances</h3>
+                                          <p className="text-gray-300">Monitor outstanding balances and payment status</p>
                   </div>
                   <div className="flex space-x-3">
                     <button className="bg-gradient-to-r from-orange-500 to-red-600 text-white px-6 py-3 rounded-xl hover:from-orange-600 hover:to-red-700 focus:outline-none focus:ring-4 focus:ring-orange-300 transition-all duration-300 transform hover:scale-105 shadow-lg">
@@ -364,7 +329,7 @@ export default function BalancesPage() {
                         </tr>
                       </thead>
                       <tbody className="bg-white divide-y divide-gray-100">
-                        {mockStudentBalances.map((balance) => (
+                        {studentBalances.map((balance: StudentBalance) => (
                           <tr key={balance.id} className="hover:bg-gradient-to-r hover:from-orange-50 hover:to-red-50 transition-all duration-200">
                             <td className="px-6 py-4 whitespace-nowrap">
                               <div>
@@ -434,7 +399,7 @@ export default function BalancesPage() {
                       className="px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent bg-gray-50"
                     >
                       <option value="">Select Student</option>
-                      {mockStudentBalances.map((balance) => (
+                      {studentBalances.map((balance: StudentBalance) => (
                         <option key={balance.id} value={balance.id}>
                           {balance.studentName} - {balance.studentId}
                         </option>
@@ -486,7 +451,7 @@ export default function BalancesPage() {
                         </tr>
                       </thead>
                       <tbody className="bg-white divide-y divide-gray-100">
-                        {mockFeeStatements.map((statement) => (
+                        {feeStatements.map((statement) => (
                           <tr key={statement.id} className="hover:bg-gradient-to-r hover:from-orange-50 hover:to-red-50 transition-all duration-200">
                             <td className="px-6 py-4 whitespace-nowrap">
                               <div>

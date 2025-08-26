@@ -33,38 +33,18 @@ export default function PaymentModal({
   const [selectedStudent, setSelectedStudent] = useState<any>(null)
   const [availableFees, setAvailableFees] = useState<any[]>([])
 
-  // Mock students and fee types for demonstration
-  const mockStudents = [
-    { id: '1', name: 'John Doe', studentId: 'STU001', class: 'Grade 10A' },
-    { id: '2', name: 'Sarah Smith', studentId: 'STU002', class: 'Grade 9B' },
-    { id: '3', name: 'Mike Johnson', studentId: 'STU003', class: 'Grade 11A' }
-  ]
-
-  const mockFeeTypes = [
-    { id: '1', name: 'Tuition Fee' },
-    { id: '2', name: 'Library Fee' },
-    { id: '3', name: 'Laboratory Fee' },
-    { id: '4', name: 'Sports Fee' }
-  ]
-
-  const mockFeeStructures = [
-    { id: '1', feeTypeId: '1', class: 'Grade 10A', term1: 500, term2: 500, term3: 500 },
-    { id: '2', feeTypeId: '2', class: 'Grade 10A', term1: 50, term2: 50, term3: 50 },
-    { id: '3', feeTypeId: '3', class: 'Grade 11A', term1: 100, term2: 100, term3: 100 }
-  ]
-
   useEffect(() => {
     if (formData.studentId) {
-      const student = mockStudents.find(s => s.id === formData.studentId)
+      const student = students.find(s => s.id === formData.studentId)
       setSelectedStudent(student)
       
       // Filter fee structures based on student's class
-      if (student) {
-        const studentFees = mockFeeStructures.filter(fs => fs.class === student.class)
+      if (student && student.classId) {
+        const studentFees = feeStructures.filter(fs => fs.classId === student.classId)
         setAvailableFees(studentFees)
       }
     }
-  }, [formData.studentId])
+  }, [formData.studentId, students, feeStructures])
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
@@ -75,9 +55,9 @@ export default function PaymentModal({
     const paymentData = {
       ...formData,
       receiptNumber,
-      studentName: selectedStudent?.name,
-      studentId: selectedStudent?.studentId,
-      feeType: mockFeeTypes.find(ft => ft.id === formData.feeTypeId)?.name
+      studentName: selectedStudent?.firstName + ' ' + selectedStudent?.lastName,
+      studentId: selectedStudent?.admissionNumber,
+      feeType: feeTypes.find(ft => ft.id === formData.feeTypeId)?.name
     }
     
     onSave(paymentData)
@@ -126,9 +106,9 @@ export default function PaymentModal({
                 required
               >
                 <option value="">Select Student</option>
-                {mockStudents.map((student) => (
+                {students.map((student) => (
                   <option key={student.id} value={student.id}>
-                    {student.name} ({student.studentId}) - {student.class}
+                    {student.firstName} {student.lastName} ({student.admissionNumber}) - {student.class?.name}
                   </option>
                 ))}
               </select>
@@ -137,7 +117,7 @@ export default function PaymentModal({
             {selectedStudent && (
               <div className="bg-blue-50 p-3 rounded-md">
                 <p className="text-sm text-blue-800">
-                  <strong>Selected:</strong> {selectedStudent.name} - {selectedStudent.class}
+                  <strong>Selected:</strong> {selectedStudent.firstName} {selectedStudent.lastName} - {selectedStudent.class?.name}
                 </p>
               </div>
             )}
@@ -154,7 +134,7 @@ export default function PaymentModal({
               >
                 <option value="">Select Fee Type</option>
                 {availableFees.map((fee) => {
-                  const feeType = mockFeeTypes.find(ft => ft.id === fee.feeTypeId)
+                  const feeType = feeTypes.find(ft => ft.id === fee.feeTypeId)
                   return (
                     <option key={fee.id} value={fee.feeTypeId}>
                       {feeType?.name}

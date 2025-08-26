@@ -2,86 +2,160 @@
 
 import { useState, useEffect } from "react"
 import DashboardLayout from "@/components/layout/dashboard-layout"
+import { useTheme, themes } from "@/contexts/ThemeContext"
 import { useStudents } from "@/hooks/useApi"
 import AddStudentModal from "@/components/modals/add-student-modal"
+import EditStudentModal from "@/components/modals/edit-student-modal"
 import BulkImportModal from "@/components/modals/bulk-import-modal"
-
-interface Student {
-  id: string
-  admissionNumber: string
-  firstName: string
-  lastName: string
-  middleName?: string
-  dateOfBirth?: string
-  gender?: string
-  parentName?: string
-  parentPhone?: string
-  parentEmail?: string
-  address?: string
-  status: 'ACTIVE' | 'GRADUATED' | 'TRANSFERRED' | 'SUSPENDED'
-  class?: {
-    id: string
-    name: string
-  }
-  school?: {
-    id: string
-    name: string
-  }
-  branch?: {
-    id: string
-    name: string
-  }
-  academicYear?: {
-    id: string
-    year: string
-  }
-  feeBalances: Array<{
-    id: string
-    amountCharged: string
-    amountPaid: string
-    balance: string
-    feeType: {
-      id: string
-      name: string
-    }
-  }>
-  feePayments: Array<{
-    id: string
-    amountPaid: string
-    paymentDate: string
-    receiptNumber: string
-  }>
-}
+import { Student } from "@/types"
 
 export default function StudentsPage() {
   const [searchTerm, setSearchTerm] = useState("")
   const [statusFilter, setStatusFilter] = useState("all")
   const [showAddModal, setShowAddModal] = useState(false)
+  const [showEditModal, setShowEditModal] = useState(false)
   const [showBulkImportModal, setShowBulkImportModal] = useState(false)
-  const { data, loading, error, getStudents } = useStudents()
+  const [selectedStudent, setSelectedStudent] = useState<Student | null>(null)
+  const [classes, setClasses] = useState([])
+  const [academicYears, setAcademicYears] = useState([])
+  const [isClient, setIsClient] = useState(false)
+  const { data, loading, error, getStudents, createStudent, updateStudent, deleteStudent } = useStudents()
+  
+  // Always call useTheme hook - hooks must be called unconditionally
+  const themeContext = useTheme();
+  
+  // Safe theme access with fallback
+  const currentTheme = themes[themeContext?.theme || 'cyan'] || themes.cyan;
+
+  // Set client flag to prevent hydration issues
+  useEffect(() => {
+    setIsClient(true)
+  }, [])
 
   useEffect(() => {
-    getStudents({
-      search: searchTerm,
-      status: statusFilter === "all" ? undefined : statusFilter
-    })
-  }, [searchTerm, statusFilter])
+    if (isClient) {
+      getStudents({
+        search: searchTerm,
+        status: statusFilter === "all" ? undefined : statusFilter
+      })
+    }
+  }, [searchTerm, statusFilter, isClient])
+
+  // Fetch classes and academic years for the modal
+  useEffect(() => {
+    if (isClient) {
+      const fetchModalData = async () => {
+        try {
+          const [classesResponse, academicYearsResponse] = await Promise.all([
+            fetch('/api/classes'),
+            fetch('/api/academic-years')
+          ])
+          
+          if (classesResponse.ok) {
+            const classesData = await classesResponse.json()
+            setClasses(classesData.classes || [])
+          }
+          
+          if (academicYearsResponse.ok) {
+            const academicYearsData = await academicYearsResponse.json()
+            setAcademicYears(academicYearsData.academicYears || [])
+          }
+        } catch (error) {
+          console.error('Error fetching modal data:', error)
+        }
+      }
+
+      fetchModalData()
+    }
+  }, [isClient])
+
+  // Prevent hydration mismatch by not rendering until client is ready
+  if (!isClient) {
+    return (
+      <DashboardLayout>
+        <div className="min-h-screen flex items-center justify-center" suppressHydrationWarning>
+          <div className="text-white text-lg" suppressHydrationWarning>Loading...</div>
+        </div>
+      </DashboardLayout>
+    )
+  }
 
   const students = data?.students || []
   const pagination = data?.pagination
 
   const filteredStudents = students
 
+  // Handle edit student
+  const handleEditStudent = (student: Student) => {
+    setSelectedStudent(student)
+    setShowEditModal(true)
+  }
+
+  // Handle update student
+  const handleUpdateStudent = async (studentData: any) => {
+    if (!selectedStudent) return
+    
+    try {
+      await updateStudent(selectedStudent.id, studentData)
+      // Refresh the students list
+      await getStudents({
+        search: searchTerm,
+        status: statusFilter === "all" ? undefined : statusFilter
+      })
+    } catch (error) {
+      console.error('Error updating student:', error)
+      throw error
+    }
+  }
+
+  // Handle delete student
+  const handleDeleteStudent = async (student: Student) => {
+    if (!confirm(`Are you sure you want to delete ${student.firstName} ${student.lastName}?`)) {
+      return
+    }
+
+    try {
+      await deleteStudent(student.id)
+      // Refresh the students list
+      await getStudents({
+        search: searchTerm,
+        status: statusFilter === "all" ? undefined : statusFilter
+      })
+    } catch (error) {
+      console.error('Error deleting student:', error)
+      alert('Failed to delete student. Please try again.')
+    }
+  }
+
+  // Handle add student
+  const handleAddStudent = async (studentData: any) => {
+    try {
+      const result = await createStudent(studentData)
+      
+      if (result.error) {
+        throw new Error(result.error)
+      }
+      
+      // Refresh the students list
+      await getStudents({
+        search: searchTerm,
+        status: statusFilter === "all" ? undefined : statusFilter
+      })
+      setShowAddModal(false)
+    } catch (error) {
+      console.error('Error adding student:', error)
+      // Re-throw the error so the modal can handle it
+      throw error
+    }
+  }
+
+  // Calculate statistics from real data
   const activeStudents = students.filter((s: Student) => s.status === 'ACTIVE').length
   const totalBalance = students.reduce((sum: number, student: Student) => {
-    const totalPaid = student.feePayments.reduce((sum: number, payment: any) => sum + parseFloat(payment.amountPaid), 0)
-    const totalCharged = student.feeBalances.reduce((sum: number, balance: any) => sum + parseFloat(balance.amountCharged), 0)
-    return sum + (totalCharged - totalPaid)
+    return sum + (student.feeStatistics?.outstandingBalance || 0)
   }, 0)
   const overdueStudents = students.filter((student: Student) => {
-    const totalPaid = student.feePayments.reduce((sum: number, payment: any) => sum + parseFloat(payment.amountPaid), 0)
-    const totalCharged = student.feeBalances.reduce((sum: number, balance: any) => sum + parseFloat(balance.amountCharged), 0)
-    return (totalCharged - totalPaid) > 0
+    return (student.feeStatistics?.outstandingBalance || 0) > 0
   }).length
 
   const formatCurrency = (amount: number) => {
@@ -91,17 +165,19 @@ export default function StudentsPage() {
     }).format(amount)
   }
 
+
+
   return (
     <DashboardLayout>
-      <div className="p-6 bg-gradient-to-br from-gray-50 to-blue-50 min-h-screen">
+      <div className="p-6 min-h-screen bg-gradient-to-br from-white/10 to-white/5 backdrop-blur-sm">
         {/* Enhanced Header */}
         <div className="mb-8">
           <div className="flex items-center justify-between">
             <div>
-              <h1 className="text-3xl font-bold bg-gradient-to-r from-gray-900 to-blue-600 bg-clip-text text-transparent">
+              <h1 className="text-3xl font-bold text-white">
                 Student Management
               </h1>
-              <p className="text-gray-600 mt-2 text-lg">
+              <p className="text-gray-300 mt-2 text-lg">
                 Manage student records, fees, and academic information
               </p>
             </div>
@@ -130,10 +206,10 @@ export default function StudentsPage() {
 
         {/* Enhanced Statistics Cards */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-          <div className="bg-white rounded-2xl shadow-lg border border-gray-100 p-6 hover:shadow-xl transition-all duration-300 transform hover:-translate-y-1">
+          <div className="bg-white/95 backdrop-blur-md rounded-2xl shadow-xl border border-white/30 p-6 hover:shadow-2xl transition-all duration-300 transform hover:-translate-y-1">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-gray-600 mb-2">Total Students</p>
+                <p className="text-sm font-medium text-gray-700 mb-2">Total Students</p>
                 <p className="text-3xl font-bold text-gray-900">{students.length}</p>
                 <p className="text-xs text-green-600 mt-1">↗ +{activeStudents} active</p>
               </div>
@@ -143,10 +219,10 @@ export default function StudentsPage() {
             </div>
           </div>
 
-          <div className="bg-white rounded-2xl shadow-lg border border-gray-100 p-6 hover:shadow-xl transition-all duration-300 transform hover:-translate-y-1">
+          <div className="bg-white/95 backdrop-blur-md rounded-2xl shadow-xl border border-white/30 p-6 hover:shadow-2xl transition-all duration-300 transform hover:-translate-y-1">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-gray-600 mb-2">Active Students</p>
+                <p className="text-sm font-medium text-gray-700 mb-2">Active Students</p>
                 <p className="text-3xl font-bold text-gray-900">{activeStudents}</p>
                 <p className="text-xs text-green-600 mt-1">↗ {((activeStudents / students.length) * 100).toFixed(1)}% of total</p>
               </div>
@@ -156,10 +232,10 @@ export default function StudentsPage() {
             </div>
           </div>
 
-          <div className="bg-white rounded-2xl shadow-lg border border-gray-100 p-6 hover:shadow-xl transition-all duration-300 transform hover:-translate-y-1">
+          <div className="bg-white/95 backdrop-blur-md rounded-2xl shadow-xl border border-white/30 p-6 hover:shadow-2xl transition-all duration-300 transform hover:-translate-y-1">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-gray-600 mb-2">Total Balance</p>
+                <p className="text-sm font-medium text-gray-700 mb-2">Total Balance</p>
                 <p className="text-3xl font-bold text-gray-900">{formatCurrency(totalBalance)}</p>
                 <p className="text-xs text-red-600 mt-1">↗ {overdueStudents} students owe</p>
               </div>
@@ -169,10 +245,10 @@ export default function StudentsPage() {
             </div>
           </div>
 
-          <div className="bg-white rounded-2xl shadow-lg border border-gray-100 p-6 hover:shadow-xl transition-all duration-300 transform hover:-translate-y-1">
+          <div className="bg-white/95 backdrop-blur-md rounded-2xl shadow-xl border border-white/30 p-6 hover:shadow-2xl transition-all duration-300 transform hover:-translate-y-1">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-gray-600 mb-2">Overdue Students</p>
+                <p className="text-sm font-medium text-gray-700 mb-2">Overdue Students</p>
                 <p className="text-3xl font-bold text-gray-900">{overdueStudents}</p>
                 <p className="text-xs text-red-600 mt-1">↗ Need attention</p>
               </div>
@@ -184,7 +260,7 @@ export default function StudentsPage() {
         </div>
 
         {/* Enhanced Search and Filter */}
-        <div className="bg-white rounded-2xl shadow-lg border border-gray-100 p-6 mb-8">
+        <div className="bg-white/95 backdrop-blur-md rounded-2xl shadow-xl border border-white/30 p-6 mb-8">
           <div className="flex flex-col md:flex-row gap-4">
             <div className="flex-1">
               <div className="relative">
@@ -280,7 +356,7 @@ export default function StudentsPage() {
 
         {/* Enhanced Students Table */}
         {!loading && !error && (
-          <div className="bg-white rounded-2xl shadow-lg border border-gray-100 overflow-hidden">
+          <div className="bg-white/95 backdrop-blur-md rounded-2xl shadow-xl border border-white/30 overflow-hidden">
             <div className="px-6 py-4 border-b border-gray-200">
               <h3 className="text-lg font-semibold text-gray-900">Student Records</h3>
               <p className="text-sm text-gray-600">Showing {filteredStudents.length} of {students.length} students</p>
@@ -364,9 +440,15 @@ export default function StudentsPage() {
                       })()}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {student.feePayments.length > 0 
-                        ? new Date(student.feePayments[0].paymentDate).toLocaleDateString()
-                        : 'No payments'
+                      {isClient && student.feePayments.length > 0 
+                        ? new Date(student.feePayments[0].paymentDate).toLocaleDateString('en-US', {
+                            year: 'numeric',
+                            month: 'short',
+                            day: 'numeric'
+                          })
+                        : isClient && student.feePayments.length === 0 
+                          ? 'No payments'
+                          : 'Loading...'
                       }
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
@@ -404,12 +486,9 @@ export default function StudentsPage() {
         <AddStudentModal
           isOpen={showAddModal}
           onClose={() => setShowAddModal(false)}
-          onSubmit={async (data) => {
-            console.log('Adding student:', data)
-            // TODO: Implement API call to add student
-            await new Promise(resolve => setTimeout(resolve, 1000)) // Simulate API call
-            getStudents() // Refresh the list
-          }}
+          onSubmit={handleAddStudent}
+          classes={classes}
+          academicYears={academicYears}
         />
 
         <BulkImportModal
@@ -421,6 +500,18 @@ export default function StudentsPage() {
             await new Promise(resolve => setTimeout(resolve, 2000)) // Simulate API call
             getStudents() // Refresh the list
           }}
+        />
+
+        <EditStudentModal
+          isOpen={showEditModal}
+          onClose={() => {
+            setShowEditModal(false)
+            setSelectedStudent(null)
+          }}
+          student={selectedStudent}
+          onUpdate={handleUpdateStudent}
+          classes={classes}
+          academicYears={academicYears}
         />
       </div>
     </DashboardLayout>

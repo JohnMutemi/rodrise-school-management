@@ -1,127 +1,139 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import DashboardLayout from "@/components/layout/dashboard-layout"
+import { useTheme, themes } from "@/contexts/ThemeContext"
+import { FeeType, FeeStructure } from "@/types"
 
-interface FeeType {
+interface FeeTypeDisplay {
   id: string
   name: string
-  description: string
-  frequency: string
-  isActive: boolean
+  description?: string
+  frequency: 'ONCE' | 'TERM' | 'YEAR' | 'MONTH'
+  isMandatory: boolean
+  isRecurring: boolean
+  _count?: {
+    feeStructures: number
+    feeBalances: number
+  }
 }
 
-interface FeeStructure {
+interface FeeStructureDisplay {
   id: string
   feeType: string
   class: string
   academicYear: string
-  term1: number
-  term2: number
-  term3: number
-  total: number
+  term1Amount: number
+  term2Amount: number
+  term3Amount: number
+  totalAmount: number
   isActive: boolean
 }
 
 export default function FeesStructurePage() {
   const [activeTab, setActiveTab] = useState<'types' | 'structures'>('types')
   const [showAddForm, setShowAddForm] = useState(false)
+  const [feeTypes, setFeeTypes] = useState<FeeType[]>([])
+  const [feeStructures, setFeeStructures] = useState<FeeStructure[]>([])
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  
+  // Always call useTheme hook, but handle the case where it might not be available
+  let themeContext;
+  try {
+    themeContext = useTheme();
+  } catch (error) {
+    console.warn('Theme context not available in fees structure page');
+  }
+  
+  // Safe theme access with fallback
+  const currentTheme = themes[themeContext?.theme || 'cyan'] || themes.cyan;
 
-  // Mock data for fee types
-  const mockFeeTypes: FeeType[] = [
-    {
-      id: "1",
-      name: "Tuition Fee",
-      description: "Main academic tuition fee",
-      frequency: "Term",
-      isActive: true
-    },
-    {
-      id: "2",
-      name: "Library Fee",
-      description: "Library and resource fee",
-      frequency: "Year",
-      isActive: true
-    },
-    {
-      id: "3",
-      name: "Laboratory Fee",
-      description: "Science laboratory fee",
-      frequency: "Term",
-      isActive: true
-    },
-    {
-      id: "4",
-      name: "Sports Fee",
-      description: "Sports and physical education fee",
-      frequency: "Year",
-      isActive: false
+  // Fetch fee types and structures from API
+  useEffect(() => {
+    const fetchData = async () => {
+      setLoading(true)
+      setError(null)
+      
+      try {
+        const [feeTypesResponse, feeStructuresResponse] = await Promise.all([
+          fetch('/api/fee-types'),
+          fetch('/api/fee-structures')
+        ])
+        
+        if (feeTypesResponse.ok) {
+          const feeTypesData = await feeTypesResponse.json()
+          setFeeTypes(feeTypesData.feeTypes || [])
+        }
+        
+        if (feeStructuresResponse.ok) {
+          const feeStructuresData = await feeStructuresResponse.json()
+          setFeeStructures(feeStructuresData.feeStructures || [])
+        }
+      } catch (err) {
+        setError('Failed to fetch data')
+        console.error('Error fetching data:', err)
+      } finally {
+        setLoading(false)
+      }
     }
-  ]
 
-  // Mock data for fee structures
-  const mockFeeStructures: FeeStructure[] = [
-    {
-      id: "1",
-      feeType: "Tuition Fee",
-      class: "Grade 10",
-      academicYear: "2024-2025",
-      term1: 500,
-      term2: 500,
-      term3: 500,
-      total: 1500,
-      isActive: true
-    },
-    {
-      id: "2",
-      feeType: "Library Fee",
-      class: "Grade 10",
-      academicYear: "2024-2025",
-      term1: 50,
-      term2: 50,
-      term3: 50,
-      total: 150,
-      isActive: true
-    },
-    {
-      id: "3",
-      feeType: "Laboratory Fee",
-      class: "Grade 11",
-      academicYear: "2024-2025",
-      term1: 100,
-      term2: 100,
-      term3: 100,
-      total: 300,
-      isActive: true
-    }
-  ]
+    fetchData()
+  }, [])
 
   return (
     <DashboardLayout>
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 p-6">
+      <div className="min-h-screen bg-gradient-to-br from-white/10 to-white/5 backdrop-blur-sm p-6">
         {/* Enhanced Header */}
         <div className="mb-8">
           <div className="flex items-center space-x-3 mb-2">
-            <div className="p-2 bg-gradient-to-r from-indigo-500 to-purple-600 rounded-lg">
-              <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1" />
+            <div className="p-3 bg-gradient-to-r from-indigo-100 to-purple-100 rounded-xl">
+              <svg className="w-6 h-6 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
               </svg>
             </div>
-            <h1 className="text-3xl font-bold bg-gradient-to-r from-gray-900 to-gray-700 bg-clip-text text-transparent">
+            <h1 className="text-3xl font-bold text-white">
               Fees Structure
             </h1>
           </div>
-          <p className="text-gray-600 text-lg ml-11">Manage fee types, structures, and pricing configurations</p>
+          <p className="text-gray-300 text-lg">Manage fee types and structures for your school</p>
         </div>
+
+        {/* Loading State */}
+        {loading && (
+          <div className="mb-8">
+            <div className="bg-white/95 backdrop-blur-md p-6 rounded-2xl shadow-xl border border-white/30">
+              <div className="animate-pulse">
+                <div className="h-4 bg-gray-200 rounded mb-2"></div>
+                <div className="h-8 bg-gray-200 rounded mb-1"></div>
+                <div className="h-3 bg-gray-200 rounded w-2/3"></div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Error State */}
+        {error && (
+          <div className="mb-8">
+            <div className="bg-red-50 border border-red-200 rounded-2xl p-6">
+              <div className="flex items-center">
+                <svg className="w-5 h-5 text-red-400 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                </svg>
+                <span className="text-red-800">{error}</span>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Enhanced Stats Cards */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-          <div className="bg-white/80 backdrop-blur-sm p-6 rounded-2xl shadow-lg border border-white/20 hover:shadow-xl transition-all duration-300 transform hover:-translate-y-1">
+          <div className="bg-white/95 backdrop-blur-md p-6 rounded-2xl shadow-xl border border-white/30 hover:shadow-2xl transition-all duration-300 transform hover:-translate-y-1">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-gray-500 mb-1">Total Fee Types</p>
+                <p className="text-sm font-medium text-gray-700 mb-1">Total Fee Types</p>
                 <p className="text-3xl font-bold bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent">
-                  {mockFeeTypes.length}
+                  {feeTypes.length}
                 </p>
               </div>
               <div className="p-3 bg-gradient-to-r from-indigo-100 to-purple-100 rounded-xl">
@@ -132,12 +144,12 @@ export default function FeesStructurePage() {
             </div>
           </div>
 
-          <div className="bg-white/80 backdrop-blur-sm p-6 rounded-2xl shadow-lg border border-white/20 hover:shadow-xl transition-all duration-300 transform hover:-translate-y-1">
+          <div className="bg-white/95 backdrop-blur-md p-6 rounded-2xl shadow-xl border border-white/30 hover:shadow-2xl transition-all duration-300 transform hover:-translate-y-1">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-gray-500 mb-1">Active Fee Types</p>
+                <p className="text-sm font-medium text-gray-700 mb-1">Active Fee Types</p>
                 <p className="text-3xl font-bold bg-gradient-to-r from-green-600 to-emerald-600 bg-clip-text text-transparent">
-                  {mockFeeTypes.filter(f => f.isActive).length}
+                  {feeTypes.filter((f: FeeType) => f.isRecurring).length}
                 </p>
               </div>
               <div className="p-3 bg-gradient-to-r from-green-100 to-emerald-100 rounded-xl">
@@ -148,12 +160,12 @@ export default function FeesStructurePage() {
             </div>
           </div>
 
-          <div className="bg-white/80 backdrop-blur-sm p-6 rounded-2xl shadow-lg border border-white/20 hover:shadow-xl transition-all duration-300 transform hover:-translate-y-1">
+          <div className="bg-white/95 backdrop-blur-md p-6 rounded-2xl shadow-xl border border-white/30 hover:shadow-2xl transition-all duration-300 transform hover:-translate-y-1">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-gray-500 mb-1">Fee Structures</p>
+                <p className="text-sm font-medium text-gray-700 mb-1">Fee Structures</p>
                 <p className="text-3xl font-bold bg-gradient-to-r from-blue-600 to-cyan-600 bg-clip-text text-transparent">
-                  {mockFeeStructures.length}
+                  {feeStructures.length}
                 </p>
               </div>
               <div className="p-3 bg-gradient-to-r from-blue-100 to-cyan-100 rounded-xl">
@@ -164,10 +176,10 @@ export default function FeesStructurePage() {
             </div>
           </div>
 
-          <div className="bg-white/80 backdrop-blur-sm p-6 rounded-2xl shadow-lg border border-white/20 hover:shadow-xl transition-all duration-300 transform hover:-translate-y-1">
+          <div className="bg-white/95 backdrop-blur-md p-6 rounded-2xl shadow-xl border border-white/30 hover:shadow-2xl transition-all duration-300 transform hover:-translate-y-1">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-gray-500 mb-1">Total Revenue</p>
+                <p className="text-sm font-medium text-gray-700 mb-1">Total Revenue</p>
                 <p className="text-3xl font-bold bg-gradient-to-r from-purple-600 to-pink-600 bg-clip-text text-transparent">
                   $0
                 </p>
@@ -182,7 +194,7 @@ export default function FeesStructurePage() {
         </div>
 
         {/* Enhanced Tabs Container */}
-        <div className="bg-white/90 backdrop-blur-sm shadow-2xl rounded-3xl border border-white/30 overflow-hidden">
+        <div className="bg-white/95 backdrop-blur-md shadow-2xl rounded-3xl border border-white/30 overflow-hidden">
           {/* Enhanced Tab Navigation */}
           <div className="bg-gradient-to-r from-gray-50 to-gray-100 border-b border-gray-200">
             <nav className="flex space-x-1 p-2">
@@ -224,8 +236,8 @@ export default function FeesStructurePage() {
               <div>
                 <div className="flex justify-between items-center mb-6">
                   <div>
-                    <h3 className="text-2xl font-bold text-gray-900 mb-1">Fee Types</h3>
-                    <p className="text-gray-600">Manage different categories of fees</p>
+                    <h3 className="text-2xl font-bold text-white mb-1">Fee Types</h3>
+                    <p className="text-gray-300">Manage different categories of fees</p>
                   </div>
                   <button
                     onClick={() => setShowAddForm(true)}
@@ -240,60 +252,52 @@ export default function FeesStructurePage() {
                   </button>
                 </div>
 
-                <div className="bg-white rounded-2xl shadow-lg border border-gray-100 overflow-hidden">
+                <div className="bg-white/95 backdrop-blur-md rounded-2xl shadow-xl border border-white/30 overflow-hidden">
                   <div className="overflow-x-auto">
                     <table className="min-w-full divide-y divide-gray-200">
                       <thead className="bg-gradient-to-r from-gray-50 to-gray-100">
                         <tr>
-                          <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                             Fee Type
                           </th>
-                          <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                             Description
                           </th>
-                          <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                             Frequency
                           </th>
-                          <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
-                            Status
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Type
                           </th>
-                          <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                             Actions
                           </th>
                         </tr>
                       </thead>
-                      <tbody className="bg-white divide-y divide-gray-100">
-                        {mockFeeTypes.map((feeType) => (
-                          <tr key={feeType.id} className="hover:bg-gradient-to-r hover:from-blue-50 hover:to-indigo-50 transition-all duration-200">
+                      <tbody className="bg-white divide-y divide-gray-200">
+                        {feeTypes.map((feeType: FeeType) => (
+                          <tr key={feeType.id} className="hover:bg-gray-50">
                             <td className="px-6 py-4 whitespace-nowrap">
-                              <div className="text-sm font-semibold text-gray-900">{feeType.name}</div>
+                              <div className="text-sm font-medium text-gray-900">{feeType.name}</div>
                             </td>
                             <td className="px-6 py-4 whitespace-nowrap">
-                              <div className="text-sm text-gray-700">{feeType.description}</div>
+                              <div className="text-sm text-gray-500">{feeType.description || 'No description'}</div>
                             </td>
                             <td className="px-6 py-4 whitespace-nowrap">
-                              <span className="inline-flex px-3 py-1 text-xs font-semibold rounded-full bg-gradient-to-r from-blue-100 to-cyan-100 text-blue-800 border border-blue-200">
-                                {feeType.frequency}
-                              </span>
+                              <div className="text-sm font-medium text-gray-900">{feeType.frequency}</div>
                             </td>
                             <td className="px-6 py-4 whitespace-nowrap">
-                              <span className={`inline-flex px-3 py-1 text-xs font-semibold rounded-full border ${
-                                feeType.isActive 
-                                  ? 'bg-gradient-to-r from-green-100 to-emerald-100 text-green-800 border-green-200' 
-                                  : 'bg-gradient-to-r from-red-100 to-pink-100 text-red-800 border-red-200'
+                              <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
+                                feeType.isMandatory
+                                  ? 'bg-green-100 text-green-800'
+                                  : 'bg-blue-100 text-blue-800'
                               }`}>
-                                {feeType.isActive ? 'Active' : 'Inactive'}
+                                {feeType.isMandatory ? 'Mandatory' : 'Optional'}
                               </span>
                             </td>
                             <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                              <div className="flex space-x-3">
-                                <button className="text-indigo-600 hover:text-indigo-900 font-medium hover:underline transition-colors duration-200">
-                                  Edit
-                                </button>
-                                <button className="text-red-600 hover:text-red-900 font-medium hover:underline transition-colors duration-200">
-                                  Delete
-                                </button>
-                              </div>
+                              <button className="text-indigo-600 hover:text-indigo-900 mr-3">Edit</button>
+                              <button className="text-red-600 hover:text-red-900">Delete</button>
                             </td>
                           </tr>
                         ))}
@@ -308,8 +312,8 @@ export default function FeesStructurePage() {
               <div>
                 <div className="flex justify-between items-center mb-6">
                   <div>
-                    <h3 className="text-2xl font-bold text-gray-900 mb-1">Fee Structures</h3>
-                    <p className="text-gray-600">Configure fee amounts for different classes and terms</p>
+                    <h3 className="text-2xl font-bold text-white mb-1">Fee Structures</h3>
+                    <p className="text-gray-300">Manage fee structures for different classes</p>
                   </div>
                   <button
                     onClick={() => setShowAddForm(true)}
@@ -324,82 +328,46 @@ export default function FeesStructurePage() {
                   </button>
                 </div>
 
-                <div className="bg-white rounded-2xl shadow-lg border border-gray-100 overflow-hidden">
+                <div className="bg-white/95 backdrop-blur-md rounded-2xl shadow-xl border border-white/30 overflow-hidden">
                   <div className="overflow-x-auto">
                     <table className="min-w-full divide-y divide-gray-200">
                       <thead className="bg-gradient-to-r from-gray-50 to-gray-100">
                         <tr>
-                          <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
-                            Fee Type
-                          </th>
-                          <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                             Class
                           </th>
-                          <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Fee Type
+                          </th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Amount
+                          </th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                             Academic Year
                           </th>
-                          <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
-                            Term 1
-                          </th>
-                          <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
-                            Term 2
-                          </th>
-                          <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
-                            Term 3
-                          </th>
-                          <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
-                            Total
-                          </th>
-                          <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
-                            Status
-                          </th>
-                          <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                             Actions
                           </th>
                         </tr>
                       </thead>
-                      <tbody className="bg-white divide-y divide-gray-100">
-                        {mockFeeStructures.map((structure) => (
-                          <tr key={structure.id} className="hover:bg-gradient-to-r hover:from-blue-50 hover:to-indigo-50 transition-all duration-200">
+                      <tbody className="bg-white divide-y divide-gray-200">
+                        {feeStructures.map((structure: FeeStructure) => (
+                          <tr key={structure.id} className="hover:bg-gray-50">
                             <td className="px-6 py-4 whitespace-nowrap">
-                              <div className="text-sm font-semibold text-gray-900">{structure.feeType}</div>
+                              <div className="text-sm font-medium text-gray-900">{structure.class?.name || 'N/A'}</div>
                             </td>
                             <td className="px-6 py-4 whitespace-nowrap">
-                              <div className="text-sm text-gray-700">{structure.class}</div>
+                              <div className="text-sm text-gray-500">{structure.feeType?.name || 'N/A'}</div>
                             </td>
                             <td className="px-6 py-4 whitespace-nowrap">
-                              <div className="text-sm text-gray-700">{structure.academicYear}</div>
+                              <div className="text-sm font-medium text-gray-900">${parseFloat(structure.amount || '0').toFixed(2)}</div>
                             </td>
                             <td className="px-6 py-4 whitespace-nowrap">
-                              <div className="text-sm font-medium text-green-700">${structure.term1}</div>
-                            </td>
-                            <td className="px-6 py-4 whitespace-nowrap">
-                              <div className="text-sm font-medium text-green-700">${structure.term2}</div>
-                            </td>
-                            <td className="px-6 py-4 whitespace-nowrap">
-                              <div className="text-sm font-medium text-green-700">${structure.term3}</div>
-                            </td>
-                            <td className="px-6 py-4 whitespace-nowrap">
-                              <div className="text-sm font-bold text-indigo-700">${structure.total}</div>
-                            </td>
-                            <td className="px-6 py-4 whitespace-nowrap">
-                              <span className={`inline-flex px-3 py-1 text-xs font-semibold rounded-full border ${
-                                structure.isActive 
-                                  ? 'bg-gradient-to-r from-green-100 to-emerald-100 text-green-800 border-green-200' 
-                                  : 'bg-gradient-to-r from-red-100 to-pink-100 text-red-800 border-red-200'
-                              }`}>
-                                {structure.isActive ? 'Active' : 'Inactive'}
-                              </span>
+                              <div className="text-sm text-gray-500">{structure.academicYear?.year || 'N/A'}</div>
                             </td>
                             <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                              <div className="flex space-x-3">
-                                <button className="text-indigo-600 hover:text-indigo-900 font-medium hover:underline transition-colors duration-200">
-                                  Edit
-                                </button>
-                                <button className="text-red-600 hover:text-red-900 font-medium hover:underline transition-colors duration-200">
-                                  Delete
-                                </button>
-                              </div>
+                              <button className="text-indigo-600 hover:text-indigo-900 mr-3">Edit</button>
+                              <button className="text-red-600 hover:text-red-900">Delete</button>
                             </td>
                           </tr>
                         ))}

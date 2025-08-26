@@ -9,6 +9,7 @@ import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
+import { useTheme, themes } from "@/contexts/ThemeContext";
 import { 
   Settings, 
   Bell, 
@@ -47,16 +48,27 @@ export default function SettingsPage() {
     compactMode: false,
     showAnimations: true
   });
+  
+  // Always call useTheme hook, but handle the case where it might not be available
+  let themeContext;
+  try {
+    themeContext = useTheme();
+  } catch (error) {
+    console.warn('Theme context not available in settings page');
+  }
+  
+  // Safe theme access with fallback
+  const currentTheme = themes[themeContext?.theme || 'cyan'] || themes.cyan;
 
   return (
     <DashboardLayout>
-      <div className="p-6 bg-gradient-to-br from-gray-50 to-blue-50 min-h-screen">
+      <div className="p-6 min-h-screen bg-gradient-to-br from-white/10 to-white/5 backdrop-blur-sm">
         <div className="space-y-6">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">Settings</h1>
-          <p className="text-gray-600 mt-1">Manage your school's configuration and preferences</p>
+                      <h1 className="text-3xl font-bold text-white">Settings</h1>
+                      <p className="text-gray-300 mt-1">Manage your school's configuration and preferences</p>
         </div>
         <div className="flex items-center gap-3">
           <Button variant="outline" size="sm">
